@@ -166,6 +166,7 @@ function saveGame() {
 function pause() {
   if (game.mode !== 'playing') return;
   game.mode = 'paused';
+  input.endFrame();
   input.releaseLock();
   hud.show(false);
   ui.showPause();
@@ -175,6 +176,7 @@ function pause() {
 function resume() {
   if (game.mode !== 'paused') return;
   game.mode = 'playing';
+  input.endFrame();
   hud.show(true);
   ui.hidePause();
   audio.init();
