@@ -116,17 +116,17 @@ function stageDrive(game) {
   const { city, player, fleet, traffic, cameraRig, missions, state } = game;
   const car = fleet.storyCars[0];
   car.health = 100;
-  car.placeAt(64, 163.6, Math.PI / 2);
+  car.placeAt(238, 275.6, Math.PI / 2);
   fleet.enter(car, player);
   car.speed = 16;
 
-  placeTraffic(traffic.cars[0], 88, 163.6, Math.PI / 2);
-  placeTraffic(traffic.cars[1], 112, 163.6, Math.PI / 2);
-  placeTraffic(traffic.cars[2], 126, 172.6, -Math.PI / 2);
+  placeTraffic(traffic.cars[0], 264, 275.6, Math.PI / 2);
+  placeTraffic(traffic.cars[1], 290, 275.6, Math.PI / 2);
+  placeTraffic(traffic.cars[2], 278, 284.6, -Math.PI / 2);
   traffic.cars[0].speed = 9;
   traffic.cars[1].speed = 11;
 
-  state.money = 1240;
+  state.money = 1590;
   state.wanted = 1;
   missions.title = 'COLD OPEN';
   missions.text = 'Drive the Tern GT to Marrow Motors';
@@ -156,9 +156,9 @@ function stageChase(game) {
   state.money = 1990;
   state.wanted = 3;
   police.clearAll();
-  police.placeUnit(161, 219.6, Math.PI / 2);
-  police.placeUnit(150, 229.6, Math.PI / 2);
-  police.placeUnit(138, 215.6, Math.PI / 2);
+  police.placeUnit(164, 220.4, Math.PI / 2);
+  police.placeUnit(152, 229.6, Math.PI / 2);
+  police.placeUnit(140, 215.6, Math.PI / 2);
   for (const unit of police.units) {
     unit.car.updateLightbar(0.05, true);
     unit.car.speed = 20;
@@ -175,10 +175,11 @@ function stageChase(game) {
   missions.markerGroup.position.set(missions.marker.x, 0.5, missions.marker.z);
   missions.markerGroup.visible = true;
 
-  // Side-on, low: the player's car and the cruisers behind it both in frame, lights toward us.
-  cameraRig.yaw = car.heading;
+  // Looking back down the avenue: the player's car in the foreground and the cruisers closing
+  // behind it, headlights and light bars toward the camera.
+  cameraRig.yaw = car.heading + Math.PI;
   cameraRig.pitch = 0.1;
-  cameraRig.snapTo(new THREE.Vector3(166, 2.7, 235), new THREE.Vector3(165, 1.2, 218));
+  cameraRig.snapTo(new THREE.Vector3(181, 2.6, 229.5), new THREE.Vector3(162, 1.2, 220));
   game.camera.fov = 64;
   game.camera.updateProjectionMatrix();
   ui.toast('Del: "Three stars, Rook. Lose them before the bridge."', 'danger', 60);

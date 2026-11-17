@@ -376,6 +376,7 @@ export class City {
 
     this.buildings.push({ x0, x1, z0, z1, height: base + height, colour, name: spec.name ?? null });
     this.buildWindows(windows, spec, base);
+    if (spec.district !== 'warehouse') this.buildShopfronts(windows, spec);
 
     // Rooftop clutter: tanks, vents, aerials.
     const vents = Math.max(1, Math.round((width * depth) / 160));
@@ -452,6 +453,44 @@ export class City {
               shaded,
             );
           }
+        }
+      }
+    }
+  }
+
+  /** Lit shop windows at street level, so the pavement has something to walk past. */
+  buildShopfronts(windows, spec) {
+    const { x0, x1, z0, z1 } = spec;
+    const base = SIDEWALK_HEIGHT;
+    const faces = [
+      { axis: 'z', at: z0 - 0.06, from: x0 + 1, to: x1 - 1, facing: -1 },
+      { axis: 'z', at: z1 + 0.06, from: x0 + 1, to: x1 - 1, facing: 1 },
+      { axis: 'x', at: x0 - 0.06, from: z0 + 1, to: z1 - 1, facing: -1 },
+      { axis: 'x', at: x1 + 0.06, from: z0 + 1, to: z1 - 1, facing: 1 },
+    ];
+    const shopColours = [0xffd9a0, 0xffc27a, 0xfff0c8, 0x9fe8ff, 0xffb0c8];
+    for (const face of faces) {
+      for (let along = face.from; along < face.to - 2.4; along += 3.6) {
+        if (!this.rng.chance(0.45)) continue;
+        const colour = shade(this.rng.pick(shopColours), this.rng.range(0.6, 0.95));
+        const height = 1.9;
+        const width = 2.6;
+        if (face.axis === 'z') {
+          windows.addFace(
+            [along + width / 2, base + 1.35, face.at],
+            [width / 2, 0, 0],
+            [0, height / 2, 0],
+            [0, 0, face.facing],
+            colour,
+          );
+        } else {
+          windows.addFace(
+            [face.at, base + 1.35, along + width / 2],
+            [0, 0, (width / 2) * -face.facing],
+            [0, height / 2, 0],
+            [face.facing, 0, 0],
+            colour,
+          );
         }
       }
     }
@@ -778,6 +817,25 @@ export class City {
       halo.scale.set(width * 1.7, height * 2.4, 1);
       halo.position.copy(mesh.position);
       this.group.add(halo);
+      // A wet smear of the sign's colour on the road below it.
+      const reflection = new THREE.Mesh(
+        new THREE.PlaneGeometry(width * 0.5, 12),
+        new THREE.MeshBasicMaterial({
+          map: makeGlowTexture('rgba(255,255,255,0.5)', 'rgba(255,255,255,0)'),
+          color: new THREE.Color(colour),
+          transparent: true,
+          opacity: 0.22,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        }),
+      );
+      reflection.rotation.x = -Math.PI / 2;
+      const towardsStreet = facing === 'x-' ? -1 : facing === 'x+' ? 1 : facing === 'z-' ? -1 : 1;
+      const outX = facing.startsWith('x') ? towardsStreet * 6 : 0;
+      const outZ = facing.startsWith('z') ? towardsStreet * 6 : 0;
+      reflection.position.set(x + outX, 0.05, z + outZ);
+      this.group.add(reflection);
       this.signs.push({ x, z, colour });
     };
 
@@ -807,12 +865,12 @@ export class City {
     const boards = [
       { x: 196, z: 214.5, y: 22, facing: 'z+', width: 22, lines: ['SABLE FM', '88.4'], colour: '#ff8ad8' },
       { x: 112, z: 246.5, y: 19, facing: 'z+', width: 18, lines: ['KRAKEN', 'LAGER'], colour: '#6ef0ff' },
-      { x: 300, z: 272.5, y: 24, facing: 'z+', width: 20, lines: ['VANE PAWN', 'CASH FOR ANYTHING'], colour: '#ffc44d' },
-      { x: 62, z: 104.5, y: 17, facing: 'z+', width: 16, lines: ['TIDELINE', 'FISH CO'], colour: '#9dff7a' },
+      { x: 300, z: 270.5, y: 24, facing: 'z+', width: 20, lines: ['VANE PAWN', 'CASH FOR ANYTHING'], colour: '#ffc44d' },
+      { x: 62, z: 102.5, y: 17, facing: 'z+', width: 16, lines: ['TIDELINE', 'FISH CO'], colour: '#9dff7a' },
       { x: 128, z: 96.5, y: 27, facing: 'z+', width: 20, lines: ['SABLE', 'HARBOR'], colour: '#ff5b8f' },
       { x: 262, z: 140.5, y: 33, facing: 'z+', width: 18, lines: ['KRAKEN', 'LAGER'], colour: '#63e6ff' },
-      { x: 214, z: 386.5, y: 22, facing: 'z+', width: 24, lines: ['SABLE', 'HARBOR'], colour: '#ff5b8f' },
-      { x: 330, z: 386.5, y: 26, facing: 'z+', width: 22, lines: ['KRAKEN', 'LAGER'], colour: '#63e6ff' },
+      { x: 214, z: 382.5, y: 22, facing: 'z+', width: 24, lines: ['SABLE', 'HARBOR'], colour: '#ff5b8f' },
+      { x: 330, z: 382.5, y: 26, facing: 'z+', width: 22, lines: ['KRAKEN', 'LAGER'], colour: '#63e6ff' },
     ];
     for (const board of boards) {
       const sign = makeSignTexture(board.lines, {

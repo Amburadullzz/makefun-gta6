@@ -267,7 +267,7 @@ html, body {
 #toast-stack {
   position: absolute;
   left: 50%;
-  bottom: 200px;
+  bottom: 264px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

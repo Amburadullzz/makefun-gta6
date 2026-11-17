@@ -255,7 +255,7 @@ export class Vehicle {
         map: makeGlowTexture('rgba(255,240,205,0.85)', 'rgba(255,220,160,0)'),
         color: 0xfff2d6,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.45,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         toneMapped: false,
@@ -270,7 +270,7 @@ export class Vehicle {
     // Headlight cones for the player's car: two spotlights that light the road ahead.
     this.beams = [];
     for (const side of [-1, 1]) {
-      const beam = new THREE.SpotLight(0xfff0cc, 0, 60, 0.5, 0.45, 1.2);
+      const beam = new THREE.SpotLight(0xfff0cc, 0, 70, 0.62, 0.5, 1.1);
       beam.position.set(side * 0.6, 0.9, spec.length / 2 - 0.2);
       beam.target.position.set(side * 0.9, -0.6, spec.length / 2 + 18);
       // Invisible until this car is the one being driven: a light left in the scene costs every
@@ -285,7 +285,7 @@ export class Vehicle {
   setHeadlights(on, withBeams = false) {
     this.headlightsOn = on;
     for (const beam of this.beams) {
-      beam.intensity = on && withBeams ? 110 : 0;
+      beam.intensity = on && withBeams ? 180 : 0;
       beam.visible = on && withBeams;
     }
     if (this.headlightPool) this.headlightPool.visible = on;
