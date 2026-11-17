@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vesper Bay — Night Shift</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" aria-label="Vesper Bay, an open-world crime game: a rain-dark harbour city at night"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="damage-flash"></div>
+
+    <div id="brand">
+      <span id="brand-mark">VESPER BAY</span>
+      <span id="district-name">THE NARROWS</span>
+    </div>
+
+    <div id="top-right">
+      <div id="money"><span class="sigil">$</span><span id="money-value">0</span></div>
+      <div id="wanted" aria-label="wanted level"></div>
+    </div>
+
+    <div id="mission-panel">
+      <div id="mission-kicker">JOB 01 · DEAD DROP</div>
+      <div id="mission-objective">Steal a car and drive it to the Salt Row quay</div>
+      <div id="mission-distance">240 m</div>
+    </div>
+
+    <div id="minimap-frame">
+      <canvas id="minimap" width="360" height="360"></canvas>
+      <div id="minimap-ring"></div>
+      <div id="compass-n">N</div>
+      <div id="minimap-label">THE NARROWS</div>
+    </div>
+
+    <div id="vitals">
+      <div id="health-row">
+        <span class="vital-icon">+</span>
+        <div id="health-track"><div id="health-fill"></div></div>
+        <span id="health-value">100</span>
+      </div>
+      <div id="stamina-row"><div id="stamina-fill"></div></div>
+    </div>
+
+    <div id="weapon-panel">
+      <div id="weapon-name">PISTOL</div>
+      <div id="ammo"><span id="ammo-mag">12</span><span class="ammo-slash">/</span><span id="ammo-reserve">48</span></div>
+    </div>
+
+    <div id="speedo">
+      <div id="speed-value">0</div>
+      <div id="speed-unit">KM/H</div>
+      <div id="gear-value">D</div>
+    </div>
+
+    <div id="crosshair"><span></span><span></span><span></span><span></span></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="toast-stack"></div>
+    <div id="objective-arrow"></div>
+    <div id="clock-readout">23:41</div>
+  </div>
+
+  <div id="start-screen">
+    <div id="start-grain"></div>
+    <div id="start-content">
+      <div id="start-kicker">A VESPER BAY STORY</div>
+      <h1 id="start-title">VESPER<br><em>BAY</em></h1>
+      <div id="start-sub">N I G H T &nbsp; S H I F T</div>
+      <p id="start-tagline">Three jobs. One tide. Nobody leaves this city clean.</p>
+      <div id="start-controls">
+        <span><b>WASD</b> move</span>
+        <span><b>SHIFT</b> sprint</span>
+        <span><b>SPACE</b> jump</span>
+        <span><b>MOUSE</b> look</span>
+        <span><b>LMB</b> fire</span>
+        <span><b>E</b> car</span>
+        <span><b>ESC</b> pause</span>
+      </div>
+      <button id="start-button" type="button">CLICK TO START</button>
+      <div id="start-save">No shift on record</div>
+      <div id="start-foot">Original city, cast and score · built for make.fun</div>
+    </div>
+    <div id="start-side">
+      <div class="side-line">KESTREL COURIER CO. · NIGHT DESK</div>
+      <div class="side-line dim">DISPATCH: D. CALLOWAY</div>
+    </div>
+  </div>
+
+  <div id="pause-screen" class="hidden">
+    <div id="pause-panel">
+      <h2>PAUSED</h2>
+      <div id="pause-stats"></div>
+      <div class="pause-buttons">
+        <button id="resume-button" type="button">RESUME</button>
+        <button id="save-button" type="button">SAVE SHIFT</button>
+        <button id="newgame-button" type="button">NEW GAME</button>
+      </div>
+      <div id="pause-hint">ESC resumes · the city keeps its lights on</div>
+    </div>
+  </div>
+
+  <div id="gameover-screen" class="hidden">
+    <div id="gameover-panel">
+      <h2 id="gameover-title">FLATLINE</h2>
+      <p id="gameover-line">The bay keeps what it takes.</p>
+      <button id="retry-button" type="button">GET UP AGAIN</button>
+    </div>
+  </div>
+
+  <div id="loading">BUILDING VESPER BAY…</div>
+</div>
+<script>
+  // A broken module should say so on screen instead of leaving a black window.
+  window.__errors = [];
+  window.addEventListener('error', function (event) {
+    window.__errors.push(String(event.message || event.error));
+    var el = document.getElementById('loading');
+    if (!el) return;
+    el.classList.remove('done');
+    el.style.color = '#ff6b8a';
+    el.textContent = 'ERROR: ' + (event.message || event.error);
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    window.__errors.push(String(event.reason));
+    var el = document.getElementById('loading');
+    if (!el) return;
+    el.classList.remove('done');
+    el.style.color = '#ff6b8a';
+    el.textContent = 'ERROR: ' + event.reason;
+  });
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
