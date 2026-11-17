@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sable Harbor — Night Shift</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<canvas id="scene" aria-label="Sable Harbor, an open-world crime game: a rain-dark harbour city seen from behind a character on the street"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-left">
+    <div id="money-row"><span id="money">$0</span><span id="money-label">on hand</span></div>
+    <div id="stars" aria-label="wanted level"></div>
+  </div>
+  <div id="hud-right">
+    <div id="minimap-frame">
+      <canvas id="minimap" width="200" height="200"></canvas>
+    </div>
+    <div id="clock-row"><span id="district">SABLE HARBOR</span><span id="clock">21:40</span></div>
+    <div id="radio-row"><span id="radio">SABLE FM 88.4</span><span id="wanted-label"></span></div>
+  </div>
+  <div id="objective">
+    <div id="objective-title">NO JOB</div>
+    <div id="objective-text">Find Del at The Drowned Lamp.</div>
+  </div>
+  <div id="health-frame">
+    <div id="health-fill"></div>
+    <span id="health-label">100</span>
+  </div>
+  <div id="prompt" class="hidden">Press <b>E</b> to get in</div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="toast-stack"></div>
+  <div id="speedo" class="hidden"><span id="speed-value">0</span><span id="speed-unit">km/h</span></div>
+</div>
+
+<div id="start" class="screen">
+  <div class="start-shade"></div>
+  <div class="start-inner">
+    <p class="eyebrow">A NIGHT SHIFT CRIME STORY</p>
+    <h1>SABLE<br><span>HARBOR</span></h1>
+    <p class="tagline">The rain never stops. Neither does the debt.</p>
+    <div class="menu">
+      <button id="btn-new" class="menu-item primary">NEW GAME</button>
+      <button id="btn-continue" class="menu-item">CONTINUE</button>
+    </div>
+    <p class="start-note" id="start-note">Enter to begin · the city is saved as you play</p>
+    <ul class="controls">
+      <li><b>WASD</b> move</li>
+      <li><b>SHIFT</b> sprint</li>
+      <li><b>SPACE</b> jump / handbrake</li>
+      <li><b>MOUSE</b> look</li>
+      <li><b>LMB</b> fire</li>
+      <li><b>E</b> enter / leave car</li>
+      <li><b>ESC</b> pause</li>
+    </ul>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="start-shade"></div>
+  <div class="pause-inner">
+    <h2>PAUSED</h2>
+    <div class="menu">
+      <button id="btn-resume" class="menu-item primary">RESUME</button>
+      <button id="btn-save" class="menu-item">SAVE</button>
+      <button id="btn-quit" class="menu-item">QUIT TO TITLE</button>
+    </div>
+    <p class="start-note" id="pause-note">Click resume or press ESC to get back on the street.</p>
+  </div>
+</div>
+
+<div id="ending" class="screen hidden">
+  <div class="start-shade"></div>
+  <div class="pause-inner">
+    <p class="eyebrow">THE SHIFT IS OVER</p>
+    <h2 id="ending-title">SABLE HARBOR</h2>
+    <p class="tagline" id="ending-text"></p>
+    <div class="menu">
+      <button id="btn-keep-playing" class="menu-item primary">KEEP DRIVING</button>
+      <button id="btn-ending-title" class="menu-item">TITLE SCREEN</button>
+    </div>
+  </div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
