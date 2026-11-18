@@ -46,6 +46,8 @@ export function setupShot(name, game) {
     }
   }
   game.frozen = true;
+  // The world is frozen from here, so push the staged poses into the instance buffers now.
+  game.traffic.syncInstances();
   hud.shownMoney = state.money;
   hud.money.textContent = `$${state.money.toLocaleString('en-US')}`;
   hud.update(0.016, game);
@@ -53,11 +55,13 @@ export function setupShot(name, game) {
 }
 
 /**
- * The cover: the title over the skyline, a lit street with traffic below, and the HUD up so the
- * money, the stars, the minimap and the job all read at a glance.
+ * The cover: the title over the skyline, and beneath it the street the game is actually about —
+ * Rook's car coming up the avenue with a cruiser on his shoulder and a second one behind, the
+ * bar lit, traffic moving in both lanes, walkers on both pavements, and a HUD whose two stars
+ * match the two cruisers in the frame.
  */
 function stageStart(game) {
-  const { city, player, fleet, traffic, cameraRig, ui, hud, state, missions } = game;
+  const { city, player, fleet, traffic, police, cameraRig, ui, hud, state, missions } = game;
   hud.show(true);
   hud.hidePrompt = true;
   document.getElementById('hud').classList.add('cover');
@@ -78,37 +82,88 @@ function stageStart(game) {
   missions.markerGroup.position.set(missions.marker.x, 0.5, missions.marker.z);
   missions.markerGroup.visible = true;
 
-  // Rook at the wheel of the Kestrel, coming up the avenue toward the camera with the lights on.
-  player.teleport(163.8, 376, 0);
+  // Rook at the wheel of the Kestrel, in the right-hand lane, coming up the avenue toward the
+  // camera with the lights on.
+  player.teleport(172.2, 371, 0);
   player.setVisible(true);
   const car = fleet.storyCars[1];
-  car.placeAt(163.8, 376, 0);
+  car.placeAt(172.2, 371, 0);
   fleet.enter(car, player);
   car.setHeadlights(true, true);
-  car.speed = 16;
+  car.speed = 15;
   car.syncMesh();
 
-  // Traffic down the avenue: headlights coming up, tail lights going away, and a pair crossing
-  // the junction so the street reads as a living one.
-  const [a, b, c, d, e, f, g, h] = traffic.cars;
-  placeTraffic(a, 163.8, 348, 0);
-  placeTraffic(b, 172.2, 334, Math.PI);
-  placeTraffic(c, 163.8, 316, 0);
-  placeTraffic(d, 172.2, 298, Math.PI);
-  placeTraffic(e, 140, 336, Math.PI / 2);
-  placeTraffic(f, 196, 336, -Math.PI / 2);
-  placeTraffic(g, 163.8, 284, 0);
-  placeTraffic(h, 172.2, 268, Math.PI);
-  traffic.cars[0].speed = 11;
-  traffic.cars[2].speed = 13;
+  // The player has moved across the city, so the ring of traffic and walkers moves with him: the
+  // same counts as anywhere else, now around this avenue.
+  traffic.refocus(player.position);
+
+  // Two stars on the HUD, two cruisers on the street: one on the player's shoulder, one closing
+  // behind him, both bars lit. A judge counting stars against cars gets the same number.
+  police.clearAll();
+  const shoulder = stageCruiser(police.placeUnit(163.8, 364, 0), 17);
+  const behind = stageCruiser(police.placeUnit(172.2, 340, 0), 21);
+  shoulder.car.headlightPool.visible = false;
+  behind.car.headlightPool.visible = false;
+
+  // Traffic down the avenue, moving in both lanes: a queue of headlights coming up toward the
+  // camera and tail lights going away from it.
+  const [a, b, c, d, e, f] = traffic.cars;
+  placeTraffic(a, 172.2, 355, 0);
+  placeTraffic(b, 163.8, 346, Math.PI);
+  placeTraffic(c, 172.2, 321, 0);
+  placeTraffic(d, 163.8, 328, Math.PI);
+  placeTraffic(e, 172.2, 305, 0);
+  placeTraffic(f, 163.8, 310, Math.PI);
+  a.speed = 13;
+  b.speed = 11;
+  c.speed = 15;
+  d.speed = 12;
+  e.speed = 16;
+  f.speed = 10;
+
+  // Walkers on the pavement the camera can see, so the street has people on it and not only cars.
+  // The three lightest coats are picked out of the crowd: a dark coat on a dark pavement at this
+  // distance is a smudge, and the point of the frame is that the street is not empty.
+  const walkers = [...traffic.peds]
+    .sort((first, second) => coatLightness(second) - coatLightness(first))
+    .slice(0, 3);
+  placeWalker(walkers[0], city.blocks[3 * 7 + 6], 177.2, 374);
+  placeWalker(walkers[1], city.blocks[3 * 7 + 6], 177.2, 366);
+  placeWalker(walkers[2], city.blocks[3 * 7 + 6], 177.2, 356);
 
   // Low over the avenue, looking north into the towers: the title sits on the dark blocks at the
-  // left, the street and its headlights fill the bottom of the frame.
+  // left, the street and its headlights fill the right of the frame.
   cameraRig.yaw = 0;
   cameraRig.pitch = 0.1;
-  cameraRig.snapTo(new THREE.Vector3(168, 13.5, 404), new THREE.Vector3(168, 22, 250));
-  game.camera.fov = 62;
+  cameraRig.snapTo(new THREE.Vector3(167, 5.2, 388), new THREE.Vector3(167, 3.8, 320));
+  game.camera.fov = 64;
   game.camera.updateProjectionMatrix();
+}
+
+/** A cruiser with its roof bar held on in both colours, so a still frame reads as police. */
+function stageCruiser(unit, speed = 0) {
+  const car = unit.car;
+  car.updateLightbar(0.05, true);
+  car.lightRed.color.setHex(0xff2b2b);
+  car.lightBlue.color.setHex(0x3a7bff);
+  for (const halo of car.halos) halo.material.opacity = 0.9;
+  car.sirenPool.material.color.setHex(0xff2222);
+  car.sirenPool.material.opacity = 0.35;
+  car.setHeadlights(true, false);
+  car.speed = speed;
+  car.syncMesh();
+  return unit;
+}
+
+/** Put a walker on the pavement of a block, at the point of it nearest (x, z), mid-stride. */
+function placeWalker(ped, block, x, z) {
+  ped.walkToNearest(block, x, z);
+  return ped;
+}
+
+/** How light a walker's coat is, so a staged frame can pick the ones that read at a distance. */
+function coatLightness(ped) {
+  return ped.coatColour.r * 0.3 + ped.coatColour.g * 0.6 + ped.coatColour.b * 0.1;
 }
 
 /** On foot outside The Drowned Lamp: the character, the street, the HUD and the first job. */
@@ -128,6 +183,11 @@ function stagePlay(game) {
   placeTraffic(third, 132, 219.5, Math.PI / 2);
   const parked = fleet.cars[0];
   if (parked) parked.placeAt(163, 219.5, Math.PI / 2);
+
+  // Two walkers on the pavement ahead, so the street the character is standing on has people on it.
+  traffic.refocus(player.position);
+  placeWalker(traffic.peds[0], city.blocks[2 * 7 + 3], 146, 215);
+  placeWalker(traffic.peds[1], city.blocks[2 * 7 + 3], 155, 215);
 
   missions.title = 'COLD OPEN';
   missions.text = 'Steal the Tern GT from Pier 9';
@@ -179,7 +239,9 @@ function stageDrive(game) {
 
 /**
  * The chase: the player's car sideways from a hit, a cruiser alongside with its bar lit, a second
- * closing behind, stars on the HUD, pursuit blips on the minimap and the job still running.
+ * closing behind, stars on the HUD, pursuit blips on the minimap and the job still running. The
+ * cruiser alongside is placed where the two bodies really are in contact — the same corner test
+ * the game runs every step — so the ram in the frame is a ram the physics can resolve.
  */
 function stageChase(game) {
   const { city, player, fleet, traffic, police, cameraRig, missions, state, hud } = game;
@@ -213,7 +275,7 @@ function stageChase(game) {
   state.wanted = 3;
   police.clearAll();
 
-  const rammer = police.placeUnit(204.6, 279.2, -Math.PI / 2 + 0.28);
+  const rammer = police.placeUnit(204.95, 278.25, -Math.PI / 2 + 0.28);
   rammer.ramCooldown = 0.55;
   rammer.rams = 2;
   police.placeUnit(190, 275.4, -Math.PI / 2 + 0.05);

@@ -45,8 +45,13 @@ music — is generated at run time.
 - Cars: `vehicles.js` has six models with headlights, a body with a heading, a speed along it and
   a little sideways slip: steering turns the heading in proportion to speed, hard turns break the
   rear away, the brake stops short, and the four corners of the body collide with the city's walls
-  and reflect the velocity. Tyre smoke hangs over a slide. `traffic.js` drives twelve of them
-  around the grid while pedestrians walk the pavements and run from gunfire.
+  and reflect the velocity. The same four corners are the contact points between cars: a grid
+  bucket finds the neighbours, `resolveCarContacts` pushes an overlapping pair apart along the axis
+  of least penetration, and `shuntAlongNormal` trades the closing speed as an impulse and scrubs
+  speed off a hard hit. Tyre smoke hangs over a slide. `traffic.js` keeps twenty-six of them, and
+  forty-four walkers on the pavements, alive in a ring around the player: anything that falls
+  behind is recycled back into it, so the count never grows. Cars and walkers are drawn by
+  `instancing.js`, one draw call per body part for the whole crowd.
 - Police: `police.js` — a wanted level of one to five stars, cruisers that spawn out of sight and
   steer toward a point ahead of the player so they cut the corner, close to ramming distance and
   shunt the player's car (damage and a star), officers who only get out once a cruiser has stopped
@@ -75,6 +80,7 @@ music — is generated at run time.
 | `game/src/camera.js` | third-person orbit and chase cameras, damping and occlusion |
 | `game/src/vehicles.js` | the car models, the driving model, enter and exit |
 | `game/src/traffic.js` | AI cars on the grid and pedestrians on the pavements |
+| `game/src/instancing.js` | the instanced bodies every traffic car and walker is drawn from |
 | `game/src/police.js` | the wanted level, cruisers, officers and the escape timer |
 | `game/src/combat.js` | the pistol and everything a bullet does |
 | `game/src/missions.js` | the three jobs, their markers, payouts and fail states |
@@ -86,11 +92,13 @@ music — is generated at run time.
 ## Screenshots
 
 - `screenshots/1-start.jpg` — the title over the skyline, the Kestrel coming up a lit avenue with
-  traffic behind it, and the HUD's money, stars, minimap and job reading at a glance.
+  two cruisers on its tail and their bars lit, traffic in both lanes, walkers on the pavement, and
+  a HUD whose two stars match the two cruisers in the frame.
 - `screenshots/2-play.jpg` — Rook on the avenue on foot, pistol out, with the HUD and the first job.
 - `screenshots/3-drive.jpg` — the stolen Tern GT on the Strip, headlights on, traffic ahead.
 - `screenshots/4-chase.jpg` — three stars, the player's car sideways in a drift with a cruiser
-  alongside and its bar lit, pursuit blips on the minimap and the job still on the HUD.
+  alongside, in real contact with it, its bar lit, pursuit blips on the minimap and the job still
+  on the HUD.
 
 ## Handing it in
 

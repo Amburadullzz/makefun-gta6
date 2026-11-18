@@ -121,6 +121,8 @@ export class Vehicle {
     this.colour = options.colour ?? this.spec.colours[0];
     this.wheelSpin = 0;
     this.bob = 0;
+    this.instanced = false;
+    this.instancedIndex = -1;
 
     this.group = new THREE.Group();
     this.group.name = `${this.spec.name} (${modelKey})`;
@@ -305,6 +307,25 @@ export class Vehicle {
     }
     if (this.headlightPool) this.headlightPool.visible = on;
     this.taillightMaterial.color.setHex(on ? 0xff2a20 : 0x551513);
+  }
+
+  /**
+   * The instanced layer draws this car now, so its own group leaves the scene graph: no draw
+   * calls, and no matrix updates for a body nobody is going to look at piece by piece.
+   */
+  hideForInstancing() {
+    this.instanced = true;
+    this.group.visible = false;
+    this.scene.remove(this.group);
+  }
+
+  /** The player took it, so it needs its own meshes, lights and tyre smoke back. */
+  showForInstancing() {
+    if (!this.instanced) return;
+    this.instanced = false;
+    this.scene.add(this.group);
+    this.group.visible = true;
+    this.syncMesh();
   }
 
   /** Flash the roof bar; police cars call this every frame with their own phase. */
@@ -579,6 +600,8 @@ export class Vehicle {
   }
 
   syncMesh() {
+    // An instanced car is drawn from the instance buffers; its own group is out of the scene.
+    if (this.instanced) return;
     this.group.position.copy(this.position);
     this.group.rotation.y = this.heading;
     // The front wheels follow the steering; the rears just spin.
@@ -593,6 +616,263 @@ export class Vehicle {
       this.body.rotation.x = Math.max(-0.04, Math.min(0.04, -this.speed * 0.0012));
       this.body.rotation.y = Math.max(-0.09, Math.min(0.09, this.slip * 0.012));
     }
+  }
+}
+
+// ---------------------------------------------------------------- car against car
+
+const CONTACT_CELL = 12;            // m: the grid bucket a car registers in
+const CONTACT_MARGIN = 0.06;        // m: corners sit just inside the paint, as the wall test has them
+const CONTACT_REACH = 3.6;          // m: how far from its centre a car looks for another body
+const SHUNT_RESTITUTION = 0.3;      // how much of the closing speed bounces back
+const HARD_HIT = 6;                 // m/s of closing speed that counts as a hard hit
+
+/**
+ * The four corners of a car's body in world space: its contact points. Written into a flat
+ * [x0, z0, x1, z1, ...] buffer so a pair test allocates nothing.
+ */
+export function contactCorners(car, out = new Float64Array(8)) {
+  const cos = Math.cos(car.heading);
+  const sin = Math.sin(car.heading);
+  const halfWidth = car.spec.width / 2 - CONTACT_MARGIN;
+  const halfLength = car.spec.length / 2 - CONTACT_MARGIN;
+  out[0] = car.position.x - cos * halfWidth + sin * halfLength;
+  out[1] = car.position.z + sin * halfWidth + cos * halfLength;
+  out[2] = car.position.x + cos * halfWidth + sin * halfLength;
+  out[3] = car.position.z - sin * halfWidth + cos * halfLength;
+  out[4] = car.position.x + cos * halfWidth - sin * halfLength;
+  out[5] = car.position.z - sin * halfWidth - cos * halfLength;
+  out[6] = car.position.x - cos * halfWidth - sin * halfLength;
+  out[7] = car.position.z + sin * halfWidth - cos * halfLength;
+  return out;
+}
+
+/**
+ * How far a point sits inside a car's body and which face it is nearest: the shortest way out,
+ * as a unit normal and a depth. Null when the point is outside the body.
+ */
+function pointInsideCar(x, z, car) {
+  const cos = Math.cos(car.heading);
+  const sin = Math.sin(car.heading);
+  const dx = x - car.position.x;
+  const dz = z - car.position.z;
+  const localX = cos * dx - sin * dz;
+  const localZ = sin * dx + cos * dz;
+  const halfWidth = car.spec.width / 2 - CONTACT_MARGIN;
+  const halfLength = car.spec.length / 2 - CONTACT_MARGIN;
+  if (Math.abs(localX) >= halfWidth || Math.abs(localZ) >= halfLength) return null;
+  const depthX = halfWidth - Math.abs(localX);
+  const depthZ = halfLength - Math.abs(localZ);
+  if (depthX < depthZ) {
+    const sign = localX >= 0 ? 1 : -1;
+    return { nx: cos * sign, nz: -sin * sign, depth: depthX };
+  }
+  const sign = localZ >= 0 ? 1 : -1;
+  return { nx: sin * sign, nz: cos * sign, depth: depthZ };
+}
+
+/** Whether a car is light enough to be shoved: a parked or stopped body holds its ground. */
+function inverseMass(car) {
+  if (car.isPlayerCar) return 1;
+  if (Math.abs(car.speed) < 0.15 && Math.abs(car.slip) < 0.15) return 0;
+  return 1;
+}
+
+/**
+ * Car against car, resolved the way walls are: every car carries four contact points, a pair that
+ * overlaps is pushed apart along the axis of least penetration, and the closing speed along that
+ * axis is exchanged as an impulse. A car only ever tests the handful of cars in its own grid
+ * buckets, so the cost stays linear in the number of cars rather than quadratic.
+ */
+export class CarContacts {
+  constructor(cell = CONTACT_CELL) {
+    this.cell = cell;
+    this.buckets = new Map();
+    this.query = [];
+    this.cornersA = new Float64Array(8);
+    this.cornersB = new Float64Array(8);
+    this.contacts = 0;
+    this.lastClosing = 0;
+    this.pairsTested = 0;
+  }
+
+  /** Drop every car into the grid bucket (or buckets) its body covers. */
+  rebuild(cars) {
+    this.buckets.clear();
+    this.pairsTested = 0;
+    for (let i = 0; i < cars.length; i += 1) {
+      const car = cars[i];
+      car.contactId = i;
+      const reach = car.spec.length * 0.5 + 0.5;
+      const ix0 = Math.floor((car.position.x - reach) / this.cell);
+      const ix1 = Math.floor((car.position.x + reach) / this.cell);
+      const iz0 = Math.floor((car.position.z - reach) / this.cell);
+      const iz1 = Math.floor((car.position.z + reach) / this.cell);
+      for (let ix = ix0; ix <= ix1; ix += 1) {
+        for (let iz = iz0; iz <= iz1; iz += 1) {
+          const key = (ix + 512) * 1024 + (iz + 512);
+          const list = this.buckets.get(key);
+          if (list) list.push(car);
+          else this.buckets.set(key, [car]);
+        }
+      }
+    }
+  }
+
+  /** The short list of cars near enough to touch this one: never every car against every car. */
+  nearbyCars(car, radius = CONTACT_REACH) {
+    const out = this.query;
+    out.length = 0;
+    const ix0 = Math.floor((car.position.x - radius) / this.cell);
+    const ix1 = Math.floor((car.position.x + radius) / this.cell);
+    const iz0 = Math.floor((car.position.z - radius) / this.cell);
+    const iz1 = Math.floor((car.position.z + radius) / this.cell);
+    for (let ix = ix0; ix <= ix1; ix += 1) {
+      for (let iz = iz0; iz <= iz1; iz += 1) {
+        const list = this.buckets.get((ix + 512) * 1024 + (iz + 512));
+        if (!list) continue;
+        for (const other of list) {
+          if (other === car || out.indexOf(other) !== -1) continue;
+          const reach = radius + other.spec.length * 0.5;
+          if (Math.abs(other.position.x - car.position.x) > reach) continue;
+          if (Math.abs(other.position.z - car.position.z) > reach) continue;
+          out.push(other);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Whether two bodies are in contact, and the axis of least penetration between them. The four
+   * corners are the contact points: a corner of one body inside the other means the two touch.
+   * The axis itself comes from the face normals of both bodies, because the cheapest way out of a
+   * shallow nose-to-tail overlap is backwards, even though the nearest face to that corner is the
+   * side. The normal points from a to b.
+   */
+  contactBetween(a, b) {
+    contactCorners(a, this.cornersA);
+    contactCorners(b, this.cornersB);
+    let cornerContact = false;
+    for (let i = 0; i < 8 && !cornerContact; i += 2) {
+      cornerContact =
+        Boolean(pointInsideCar(this.cornersA[i], this.cornersA[i + 1], b)) ||
+        Boolean(pointInsideCar(this.cornersB[i], this.cornersB[i + 1], a));
+    }
+    const axis = this.overlapAxis(a, b);
+    if (!axis) return null;
+    axis.cornerContact = cornerContact;
+    return axis;
+  }
+
+  /**
+   * The separating-axis test over the four face normals of the two bodies: the smallest overlap is
+   * the axis of least penetration, and the sign of it makes the normal point from a to b. Null when
+   * the bodies are apart on any axis.
+   */
+  overlapAxis(a, b) {
+    const dx = b.position.x - a.position.x;
+    const dz = b.position.z - a.position.z;
+    let best = null;
+    for (const car of [a, b]) {
+      const cos = Math.cos(car.heading);
+      const sin = Math.sin(car.heading);
+      for (const axis of [[cos, -sin], [sin, cos]]) {
+        const ax = axis[0];
+        const az = axis[1];
+        const radiusA = this.projectionRadius(a, ax, az);
+        const radiusB = this.projectionRadius(b, ax, az);
+        const distance = dx * ax + dz * az;
+        const overlap = radiusA + radiusB - Math.abs(distance);
+        if (overlap <= 0) return null;
+        if (!best || overlap < best.depth) {
+          const sign = distance >= 0 ? 1 : -1;
+          best = { nx: ax * sign, nz: az * sign, depth: overlap, cornerContact: false };
+        }
+      }
+    }
+    return best;
+  }
+
+  projectionRadius(car, ax, az) {
+    const cos = Math.cos(car.heading);
+    const sin = Math.sin(car.heading);
+    const halfWidth = car.spec.width / 2 - CONTACT_MARGIN;
+    const halfLength = car.spec.length / 2 - CONTACT_MARGIN;
+    return halfWidth * Math.abs(ax * cos + az * -sin) + halfLength * Math.abs(ax * sin + az * cos);
+  }
+
+  /** Resolve every overlapping pair in the city once. */
+  resolveCarContacts(cars) {
+    this.rebuild(cars);
+    this.contacts = 0;
+    this.lastClosing = 0;
+    for (let i = 0; i < cars.length; i += 1) {
+      const a = cars[i];
+      const near = this.nearbyCars(a);
+      for (let k = 0; k < near.length; k += 1) {
+        const b = near[k];
+        if (b.contactId <= a.contactId) continue;
+        this.pairsTested += 1;
+        this.resolvePair(a, b);
+      }
+    }
+    return this.contacts;
+  }
+
+  resolvePair(a, b) {
+    const contact = this.contactBetween(a, b);
+    if (!contact) return false;
+    const invA = inverseMass(a);
+    const invB = inverseMass(b);
+    const total = invA + invB;
+    if (total <= 0) return false;
+
+    // Apart along the axis of least penetration, each body as far as its mass allows.
+    const depth = Math.min(contact.depth, 1.5);
+    a.position.x -= contact.nx * depth * (invA / total);
+    a.position.z -= contact.nz * depth * (invA / total);
+    b.position.x += contact.nx * depth * (invB / total);
+    b.position.z += contact.nz * depth * (invB / total);
+    // A shunt must not post a car through the wall behind it.
+    a.resolveBodyCollisions();
+    b.resolveBodyCollisions();
+    a.syncMesh();
+    b.syncMesh();
+
+    const av = a.worldVelocity;
+    const bv = b.worldVelocity;
+    const closing = (av.x - bv.x) * contact.nx + (av.z - bv.z) * contact.nz;
+    this.shuntAlongNormal(a, b, contact.nx, contact.nz, closing);
+    this.contacts += 1;
+    if (closing > this.lastClosing) this.lastClosing = closing;
+    return true;
+  }
+
+  /**
+   * Exchange the momentum along the contact normal, scaled by how fast the two were closing on
+   * it, and scrub speed off both bodies when the hit was hard.
+   */
+  shuntAlongNormal(a, b, nx, nz, closing) {
+    if (closing <= 0) return 0;
+    const invA = inverseMass(a);
+    const invB = inverseMass(b);
+    const total = invA + invB;
+    if (total <= 0) return 0;
+    const impulse = (closing * (1 + SHUNT_RESTITUTION)) / total;
+    a.applyImpulse(-nx * impulse * invA, -nz * impulse * invA);
+    b.applyImpulse(nx * impulse * invB, nz * impulse * invB);
+    if (closing > HARD_HIT) {
+      const scrub = Math.min(0.5, (closing - HARD_HIT) * 0.06);
+      a.speed *= 1 - scrub;
+      b.speed *= 1 - scrub;
+      const damage = Math.min(16, (closing - HARD_HIT) * 1.4);
+      a.damage(damage);
+      b.damage(damage);
+      if (closing > a.impact) a.impact = closing;
+      if (closing > b.impact) b.impact = closing;
+    }
+    return impulse;
   }
 }
 
@@ -833,7 +1113,8 @@ export class VehicleFleet {
   }
 }
 
-function darken(colour, factor) {
+/** A paint colour at a fraction of its brightness, for the darker parts of a body. */
+export function darken(colour, factor) {
   const r = Math.round(((colour >> 16) & 0xff) * factor);
   const g = Math.round(((colour >> 8) & 0xff) * factor);
   const b = Math.round((colour & 0xff) * factor);

@@ -8,7 +8,7 @@ import { Input } from './input.js';
 import { City } from './city.js';
 import { Player } from './player.js';
 import { CameraRig } from './camera.js';
-import { VehicleFleet } from './vehicles.js';
+import { VehicleFleet, CarContacts } from './vehicles.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
 import { Combat } from './combat.js';
@@ -46,7 +46,7 @@ const input = new Input(canvas);
 const player = new Player(scene, city, state);
 const cameraRig = new CameraRig(camera, city, input);
 const fleet = new VehicleFleet(scene, city, rng.fork(2));
-const traffic = new Traffic(scene, city, rng.fork(3), fleet);
+const traffic = new Traffic(scene, city, rng.fork(3), fleet, player);
 const audio = new AudioEngine();
 const police = new Police(scene, city, rng.fork(4), state, fleet, traffic, audio);
 const combat = new Combat(scene, city, camera, state, police, traffic, fleet, audio, cameraRig);
@@ -78,6 +78,21 @@ const game = {
   frozen: false,
   onPlayerHurt: null,
 };
+
+// Every car in the world, in one list, for the car-against-car pass.
+const contacts = new CarContacts();
+const contactCars = [];
+game.contacts = contacts;
+game.contactCars = contactCars;
+
+/** Resolve car-against-car contact for the traffic, the parked fleet and the cruisers alike. */
+function stepCarContacts() {
+  contactCars.length = 0;
+  for (const car of traffic.cars) contactCars.push(car);
+  for (const car of fleet.cars) contactCars.push(car);
+  for (const unit of police.units) if (unit.alive) contactCars.push(unit.car);
+  contacts.resolveCarContacts(contactCars);
+}
 game.stepForShot = (dt) => step(dt);
 
 const ui = new Ui({
@@ -310,6 +325,7 @@ function step(dt) {
   city.update(dt, player.position);
   traffic.update(dt, player);
   police.update(dt, player);
+  stepCarContacts();
   combat.update(dt, player, input);
   missions.update(dt, game);
   fleet.update(dt, game.elapsed);
@@ -380,6 +396,8 @@ function updateWorld(rawDelta) {
       steps += 1;
     }
     if (steps === MAX_STEPS) accumulator = 0;
+    // One instance upload per drawn frame, not one per fixed step.
+    traffic.syncInstances();
   } else if (game.mode === 'title') {
     // A slow drift over the bay behind the title card; the cover is a little brighter than play.
     renderer.toneMappingExposure = 1.85;
@@ -392,6 +410,7 @@ function updateWorld(rawDelta) {
     camera.updateProjectionMatrix();
     city.update(rawDelta, { x: 196, z: 196 });
     traffic.update(rawDelta, null);
+    traffic.syncInstances();
   } else if (game.mode === 'paused') {
     city.update(0, player.position);
   }

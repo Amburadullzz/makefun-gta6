@@ -7,7 +7,7 @@ import { Vehicle } from './vehicles.js';
 const OFFICER_SKIN = [0xc79a76, 0x8d6448, 0x5e4030, 0xe0b592];
 const UNIFORM = 0x1a2534;
 const RAM_COOLDOWN = 1.2;   // seconds: a ram is a moment, not a permanent shove
-const RAM_REACH = 0.82;     // how much of the two cars' lengths counts as touching
+const RAM_REACH = 1.0;      // how much of the two cars' lengths counts as touching (nose to tail)
 
 /** One patrol unit: a cruiser with two officers in it. */
 class PoliceUnit {
@@ -388,7 +388,11 @@ export class Police {
     return (av.x - bv.x) * nx + (av.z - bv.z) * nz;
   }
 
-  /** Bumper to bumper: keep the two bodies apart and, once per cooldown, let the cruiser ram. */
+  /**
+   * Bumper to bumper: the two bodies are already being pushed apart and shunted by the car
+   * contact pass, so this is only the ram itself — the extra shove, the damage and the star,
+   * once per cooldown.
+   */
   resolveContact(unit, player) {
     const playerCar = this.fleet.playerCar;
     if (!playerCar || playerCar === unit.car) return;
@@ -401,14 +405,6 @@ export class Police {
     const nx = dx / gap;
     const nz = dz / gap;
     const closing = this.closingSpeed(unit.car, playerCar, nx, nz);
-    const overlap = reach - gap;
-    playerCar.position.x += nx * overlap * 0.6;
-    playerCar.position.z += nz * overlap * 0.6;
-    unit.car.position.x -= nx * overlap * 0.4;
-    unit.car.position.z -= nz * overlap * 0.4;
-    playerCar.syncMesh();
-    unit.car.syncMesh();
-
     if (closing > 3 && unit.ramCooldown <= 0) this.applyRamImpulse(unit, playerCar, nx, nz, closing);
   }
 
@@ -421,7 +417,7 @@ export class Police {
     const push = Math.min(15, 3.5 + closing * 0.85);
     playerCar.applyImpulse(nx * push, nz * push);
     unit.car.applyImpulse(-nx * push * 0.3, -nz * push * 0.3);
-    const damage = Math.min(22, 3 + closing * 0.85);
+    const damage = Math.min(14, 2 + closing * 0.6);
     playerCar.damage(damage);
     playerCar.lastRam = this.time;
     unit.ramCooldown = RAM_COOLDOWN;
