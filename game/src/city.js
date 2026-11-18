@@ -1112,6 +1112,60 @@ export class City {
     position.z = Math.max(this.bounds.z0, Math.min(this.bounds.z1, position.z));
   }
 
+  /**
+   * The push that takes a point out of the nearest building wall, with that wall's outward
+   * normal. A car tests its four corners with this: a corner that has crossed a wall comes back
+   * with the shortest way out and the direction of the face it crossed.
+   */
+  wallContact(x, z, radius = 0) {
+    let best = null;
+    for (const index of this.nearbyBuildingIndices(x, z, radius + 4)) {
+      const building = this.buildings[index];
+      const closestX = Math.max(building.x0, Math.min(x, building.x1));
+      const closestZ = Math.max(building.z0, Math.min(z, building.z1));
+      const dx = x - closestX;
+      const dz = z - closestZ;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > radius * radius) continue;
+
+      let nx;
+      let nz;
+      let depth;
+      if (distanceSq > 1e-6) {
+        const distance = Math.sqrt(distanceSq);
+        nx = dx / distance;
+        nz = dz / distance;
+        depth = radius - distance;
+      } else {
+        // Inside the rectangle: leave by the nearest face.
+        const toLeft = x - building.x0;
+        const toRight = building.x1 - x;
+        const toBack = z - building.z0;
+        const toFront = building.z1 - z;
+        const smallest = Math.min(toLeft, toRight, toBack, toFront);
+        if (smallest === toLeft) {
+          nx = -1;
+          nz = 0;
+          depth = toLeft + radius;
+        } else if (smallest === toRight) {
+          nx = 1;
+          nz = 0;
+          depth = toRight + radius;
+        } else if (smallest === toBack) {
+          nx = 0;
+          nz = -1;
+          depth = toBack + radius;
+        } else {
+          nx = 0;
+          nz = 1;
+          depth = toFront + radius;
+        }
+      }
+      if (!best || depth > best.depth) best = { nx, nz, depth };
+    }
+    return best;
+  }
+
   /** How far along a segment the view is still clear of buildings (0 blocked, 1 clear). */
   cameraClearT(from, to) {
     const steps = 14;

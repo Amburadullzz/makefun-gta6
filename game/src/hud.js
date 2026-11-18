@@ -3,7 +3,6 @@
 // camera, with the player as an arrow in the middle and a north marker on the rim.
 import { PROMENADE_X, WATER_X, GRID, PITCH, ROAD_WIDTH } from './city.js';
 
-const MAP_RADIUS = 100;
 const MAP_SCALE = 1.42;
 
 export class Hud {
@@ -41,6 +40,7 @@ export class Hud {
     this.flashTimer = 0;
     this.lastWanted = state.wanted;
     this.mapTimer = 0;
+    this.hidePrompt = false;
   }
 
   show(visible) {
@@ -85,8 +85,10 @@ export class Hud {
     this.radio.textContent = player.inVehicle ? 'SABLE FM · NIGHT DRIVE' : 'SABLE FM 88.4';
     this.wantedLabel.textContent = state.wanted > 0 ? 'WANTED' : '';
 
-    // The prompt tells you what E will do right now.
-    if (player.inVehicle) {
+    // The prompt tells you what E will do right now; on a staged frame it would sit on the car.
+    if (this.hidePrompt) {
+      this.prompt.classList.add('hidden');
+    } else if (player.inVehicle) {
       this.prompt.classList.remove('hidden');
       this.prompt.innerHTML = 'Press <b>E</b> to get out';
     } else if (game.nearbyCar) {
@@ -121,6 +123,7 @@ export class Hud {
     const ctx = this.ctx;
     const size = this.canvas.width;
     const centre = size / 2;
+    const mapRadius = centre - 4;
     const player = game.player;
     const focusX = player.position.x;
     const focusZ = player.position.z;
@@ -128,7 +131,7 @@ export class Hud {
     ctx.clearRect(0, 0, size, size);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(centre, centre, MAP_RADIUS, 0, Math.PI * 2);
+    ctx.arc(centre, centre, mapRadius, 0, Math.PI * 2);
     ctx.clip();
     ctx.fillStyle = '#080d13';
     ctx.fillRect(0, 0, size, size);
@@ -183,16 +186,22 @@ export class Hud {
     }
 
     // Police, in flashing red and blue.
-    const pulse = (Math.sin(performance.now() / 120) + 1) / 2;
-    for (const unit of game.police.units) {
-      ctx.fillStyle = pulse > 0.5 ? '#ff4040' : '#4d7bff';
+    const pulse = Math.sin(performance.now() / 120);
+    game.police.units.forEach((unit, index) => {
+      // Alternate red and blue per unit, so a pursuit always shows both colours on the map.
+      const hot = (index % 2 === 0) === pulse > 0;
+      ctx.fillStyle = hot ? 'rgba(255,64,64,0.3)' : 'rgba(77,123,255,0.3)';
       ctx.beginPath();
-      ctx.arc(unit.car.position.x, unit.car.position.z, 3.4, 0, Math.PI * 2);
+      ctx.arc(unit.car.position.x, unit.car.position.z, 9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 0.8;
+      ctx.fillStyle = hot ? '#ff4040' : '#4d7bff';
+      ctx.beginPath();
+      ctx.arc(unit.car.position.x, unit.car.position.z, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
-    }
+    });
 
     ctx.restore();
 
@@ -206,7 +215,7 @@ export class Hud {
       let mx = (dx * cos - dz * sin) * MAP_SCALE;
       let my = (dx * sin + dz * cos) * MAP_SCALE;
       const distance = Math.hypot(mx, my);
-      const limit = MAP_RADIUS - 13;
+      const limit = mapRadius - 13;
       const pinned = distance > limit;
       if (pinned && distance > 0.001) {
         mx = (mx / distance) * limit;
@@ -224,15 +233,24 @@ export class Hud {
       ctx.restore();
     }
 
+    // While wanted, a red ring round the arrow: the map reads as a pursuit at a glance.
+    if (this.state.wanted > 0) {
+      ctx.strokeStyle = 'rgba(255,72,72,0.8)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(centre, centre, 14 + Math.sin(performance.now() / 180) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // The player: an arrow at the centre, pointing the way the body faces.
     ctx.save();
     ctx.translate(centre, centre);
     ctx.rotate(-(player.yaw - yaw) + Math.PI);
     ctx.beginPath();
-    ctx.moveTo(0, -8);
-    ctx.lineTo(5.5, 6);
-    ctx.lineTo(0, 3);
-    ctx.lineTo(-5.5, 6);
+    ctx.moveTo(0, -10);
+    ctx.lineTo(7, 7);
+    ctx.lineTo(0, 3.5);
+    ctx.lineTo(-7, 7);
     ctx.closePath();
     ctx.fillStyle = '#eaf4ff';
     ctx.fill();
@@ -243,25 +261,25 @@ export class Hud {
 
     // North marker on the rim.
     const northAngle = -yaw - Math.PI / 2;
-    const nx = centre + Math.cos(northAngle) * (MAP_RADIUS - 9);
-    const ny = centre + Math.sin(northAngle) * (MAP_RADIUS - 9);
+    const nx = centre + Math.cos(northAngle) * (mapRadius - 9);
+    const ny = centre + Math.sin(northAngle) * (mapRadius - 9);
     ctx.fillStyle = 'rgba(8,13,19,0.85)';
     ctx.beginPath();
     ctx.arc(nx, ny, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#e8f2ff';
-    ctx.font = '700 9px Helvetica, Arial, sans-serif';
+    ctx.font = '700 11px Helvetica, Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('N', nx, ny + 0.5);
 
     // A soft inner shadow so the map sits in its frame.
-    const gradient = ctx.createRadialGradient(centre, centre, MAP_RADIUS * 0.55, centre, centre, MAP_RADIUS);
+    const gradient = ctx.createRadialGradient(centre, centre, mapRadius * 0.55, centre, centre, mapRadius);
     gradient.addColorStop(0, 'rgba(0,0,0,0)');
     gradient.addColorStop(1, 'rgba(0,0,0,0.55)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(centre, centre, MAP_RADIUS, 0, Math.PI * 2);
+    ctx.arc(centre, centre, mapRadius, 0, Math.PI * 2);
     ctx.fill();
   }
 }

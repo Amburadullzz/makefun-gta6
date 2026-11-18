@@ -42,11 +42,15 @@ music — is generated at run time.
 - The character: `player.js` — a box-built body with a walk cycle, acceleration and friction,
   sprint, jump, gravity and ground clamping; `camera.js` orbits on the mouse and pulls in when a
   building would block the view.
-- Cars: `vehicles.js` has six models with headlights and a handbrake, and `traffic.js` drives
-  twelve of them around the grid while pedestrians walk the pavements and run from gunfire.
+- Cars: `vehicles.js` has six models with headlights, a body with a heading, a speed along it and
+  a little sideways slip: steering turns the heading in proportion to speed, hard turns break the
+  rear away, the brake stops short, and the four corners of the body collide with the city's walls
+  and reflect the velocity. Tyre smoke hangs over a slide. `traffic.js` drives twelve of them
+  around the grid while pedestrians walk the pavements and run from gunfire.
 - Police: `police.js` — a wanted level of one to five stars, cruisers that spawn out of sight and
-  follow the street graph to you, officers who get out and shoot, and a level that falls once you
-  break line of sight.
+  steer toward a point ahead of the player so they cut the corner, close to ramming distance and
+  shunt the player's car (damage and a star), officers who only get out once a cruiser has stopped
+  nearby, and a level that falls once you break line of sight.
 - Missions: `missions.js` — three chained jobs (Cold Open, Bad Debts, Last Ferry) with markers in
   the world and on the minimap, a payout, a fail state, and a repeatable chop-shop job afterwards.
 - Combat: `combat.js` — a pistol with a raycast, muzzle flash, tracer, sparks, recoil and ammo.
@@ -81,10 +85,12 @@ music — is generated at run time.
 
 ## Screenshots
 
-- `screenshots/1-start.jpg` — the title over the harbour, with the city's neon behind it.
+- `screenshots/1-start.jpg` — the title over the skyline, the Kestrel coming up a lit avenue with
+  traffic behind it, and the HUD's money, stars, minimap and job reading at a glance.
 - `screenshots/2-play.jpg` — Rook on the avenue on foot, pistol out, with the HUD and the first job.
 - `screenshots/3-drive.jpg` — the stolen Tern GT on the Strip, headlights on, traffic ahead.
-- `screenshots/4-chase.jpg` — three stars, a cruiser alongside with its lights going, Del on the radio.
+- `screenshots/4-chase.jpg` — three stars, the player's car sideways in a drift with a cruiser
+  alongside and its bar lit, pursuit blips on the minimap and the job still on the HUD.
 
 ## Handing it in
 

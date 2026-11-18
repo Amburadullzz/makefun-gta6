@@ -6,6 +6,8 @@ import { Vehicle } from './vehicles.js';
 
 const OFFICER_SKIN = [0xc79a76, 0x8d6448, 0x5e4030, 0xe0b592];
 const UNIFORM = 0x1a2534;
+const RAM_COOLDOWN = 1.2;   // seconds: a ram is a moment, not a permanent shove
+const RAM_REACH = 0.82;     // how much of the two cars' lengths counts as touching
 
 /** One patrol unit: a cruiser with two officers in it. */
 class PoliceUnit {
@@ -19,6 +21,8 @@ class PoliceUnit {
     this.officers = [];
     this.deployed = false;
     this.alive = true;
+    this.ramCooldown = 0;
+    this.rams = 0;
     car.updateLightbar(0, true);
   }
 
@@ -172,6 +176,7 @@ export class Police {
     this.escapeTimer = 0;
     this.time = 0;
     this.onDamagePlayer = null;
+    this.onRam = null;
     this.sirenOn = false;
     state.onChange((kind) => {
       if (kind === 'wanted') this.syncWanted();
@@ -238,8 +243,8 @@ export class Police {
       this.rng,
       player.position.x,
       player.position.z,
-      90,
-      190,
+      60,
+      130,
     );
     const heading = Math.atan2(player.position.x - spot.x, player.position.z - spot.z);
     const car = new Vehicle(this.scene, this.city, 'police', { x: spot.x, z: spot.z, heading });
@@ -263,14 +268,17 @@ export class Police {
     if (this.audio) this.audio.setSiren(false);
   }
 
-  /** Drive a cruiser: follow the street grid to the player's block, then close in. */
+  /**
+   * Drive a cruiser: cut the corner to where the player is going, close to ramming distance,
+   * ram, and only stop to let the officers out once the car has actually stopped nearby.
+   */
   updateUnit(unit, dt, player) {
     const car = unit.car;
     car.updateLightbar(this.time, true);
+    unit.ramCooldown = Math.max(0, unit.ramCooldown - dt);
 
     // If the car is wrecked or stuck against something for too long, replace it.
     if (car.health <= 0) {
-      unit.deployed = true;
       if (unit.aliveOfficers.length === 0) {
         this.despawnUnit(unit);
         return;
@@ -279,9 +287,11 @@ export class Police {
 
     const distanceToPlayer = Math.hypot(car.position.x - player.position.x, car.position.z - player.position.z);
 
-    if (distanceToPlayer < 26 && !unit.deployed) {
+    // Officers leave the car only once it has stopped, close to the player.
+    if (!unit.deployed && distanceToPlayer < 11 && (Math.abs(car.speed) < 2.2 || car.health <= 0)) {
       unit.deploy();
-      car.speed *= 0.2;
+      car.speed = 0;
+      car.slip = 0;
     }
 
     // Officers on foot take over once they are out.
@@ -294,50 +304,25 @@ export class Police {
       });
     }
 
-    if (unit.deployed && officers.length === 0) {
-      // Everyone is down; the wreck stays where it is for a while.
-      car.speed *= Math.exp(-3 * dt);
-      car.integrate(dt);
-      return;
-    }
-
     if (unit.deployed) {
-      car.speed *= Math.exp(-4 * dt);
+      // The cruiser sits where it stopped while the officers work.
+      car.speed *= Math.exp(-5 * dt);
+      car.slip *= Math.exp(-5 * dt);
       car.integrate(dt);
       return;
     }
 
-    unit.pathTimer -= dt;
-    if (unit.pathTimer <= 0 || unit.path.length === 0) {
-      unit.pathTimer = 1.4;
-      const from = this.city.nearestNode(car.position.x, car.position.z);
-      const to = this.city.nearestNode(player.position.x, player.position.z);
-      unit.path = this.city.pathBetween(from, to).slice(1);
-    }
+    const intercept = this.steerTowardIntercept(unit, player, dt);
 
-    let targetX = player.position.x;
-    let targetZ = player.position.z;
-    let aggressive = false;
-    if (unit.path.length > 0 && distanceToPlayer > 55) {
-      const node = unit.path[0];
-      targetX = node.x;
-      targetZ = node.z;
-      if (Math.hypot(car.position.x - node.x, car.position.z - node.z) < 8) unit.path.shift();
-    } else {
-      aggressive = true;
-    }
-
-    const desired = Math.atan2(targetX - car.position.x, targetZ - car.position.z);
-    let difference = desired - car.heading;
-    while (difference > Math.PI) difference -= Math.PI * 2;
-    while (difference < -Math.PI) difference += Math.PI * 2;
-    car.heading += difference * Math.min(1, dt * (aggressive ? 4.2 : 3));
-
+    // Close hard; only lift for traffic, never for the player's car, and not at all once the
+    // cruiser is committed to the last stretch: a pursuit does not queue behind a taxi.
     const gap = this.traffic.obstacleAhead(car, this.fleet.playerCar);
-    let speed = aggressive ? 22 : 26;
-    if (gap < 10) speed = Math.max(0, (gap - 4) * 2);
+    let speed = intercept.distance > 80 ? 34 : intercept.distance > 14 ? 32 : 26;
+    if (intercept.distance > 45 && gap < 10) speed = Math.min(speed, Math.max(0, (gap - 4) * 2.6));
     if (car.health <= 0) speed = 0;
     car.roll(dt, speed);
+
+    this.resolveContact(unit, player);
 
     // A cruiser that has been wedged against a wall for a while is moved back onto the road.
     if (Math.abs(car.speed) < 1 && distanceToPlayer > 40) {
@@ -353,6 +338,101 @@ export class Police {
     } else {
       unit.stuck = 0;
     }
+  }
+
+  /**
+   * Where the player will be, not where they are: the cruiser aims at a point ahead of the
+   * player's velocity, so it cuts the corner instead of trailing them and closes for a ram.
+   */
+  steerTowardIntercept(unit, player, dt) {
+    const car = unit.car;
+    const target = player.inVehicle ? player.inVehicle.position : player.position;
+    const velocity = player.inVehicle ? player.inVehicle.worldVelocity : { x: 0, z: 0 };
+    const distance = Math.hypot(target.x - car.position.x, target.z - car.position.z);
+    const lead = Math.min(1.5, 0.3 + distance * 0.035);
+    let aimX = target.x + velocity.x * lead;
+    let aimZ = target.z + velocity.z * lead;
+
+    // Far away, work the grid; once the cruiser is on the same block it aims at the intercept
+    // point itself, which is what makes it cut the corner.
+    if (distance > 60) {
+      unit.pathTimer -= dt;
+      if (unit.pathTimer <= 0 || unit.path.length === 0) {
+        unit.pathTimer = 1.4;
+        const from = this.city.nearestNode(car.position.x, car.position.z);
+        const to = this.city.nearestNode(aimX, aimZ);
+        unit.path = this.city.pathBetween(from, to).slice(1);
+      }
+      while (unit.path.length > 0) {
+        const node = unit.path[0];
+        if (Math.hypot(car.position.x - node.x, car.position.z - node.z) < 9) unit.path.shift();
+        else break;
+      }
+      if (unit.path.length > 0) {
+        aimX = unit.path[0].x;
+        aimZ = unit.path[0].z;
+      }
+    } else {
+      unit.path.length = 0;
+    }
+
+    const desired = Math.atan2(aimX - car.position.x, aimZ - car.position.z);
+    car.steerToward(desired, dt, distance < 40 ? 1.35 : 1);
+    return { distance, aimX, aimZ, lead };
+  }
+
+  /** How fast the two cars are closing along the line between them, in m/s. */
+  closingSpeed(a, b, nx, nz) {
+    const av = a.worldVelocity;
+    const bv = b.worldVelocity;
+    return (av.x - bv.x) * nx + (av.z - bv.z) * nz;
+  }
+
+  /** Bumper to bumper: keep the two bodies apart and, once per cooldown, let the cruiser ram. */
+  resolveContact(unit, player) {
+    const playerCar = this.fleet.playerCar;
+    if (!playerCar || playerCar === unit.car) return;
+    const dx = playerCar.position.x - unit.car.position.x;
+    const dz = playerCar.position.z - unit.car.position.z;
+    const gap = Math.hypot(dx, dz) || 0.001;
+    const reach = (unit.car.spec.length + playerCar.spec.length) * 0.5 * RAM_REACH;
+    if (gap > reach) return;
+
+    const nx = dx / gap;
+    const nz = dz / gap;
+    const closing = this.closingSpeed(unit.car, playerCar, nx, nz);
+    const overlap = reach - gap;
+    playerCar.position.x += nx * overlap * 0.6;
+    playerCar.position.z += nz * overlap * 0.6;
+    unit.car.position.x -= nx * overlap * 0.4;
+    unit.car.position.z -= nz * overlap * 0.4;
+    playerCar.syncMesh();
+    unit.car.syncMesh();
+
+    if (closing > 3 && unit.ramCooldown <= 0) this.applyRamImpulse(unit, playerCar, nx, nz, closing);
+  }
+
+  /**
+   * A ram: an impulse along the line between the two cars, scaled by how fast the cruiser was
+   * closing. The player's car is shoved and dented, the cruiser recoils, and a hard hit costs a
+   * wanted star. The cooldown is what makes a ram a moment rather than a permanent shove.
+   */
+  applyRamImpulse(unit, playerCar, nx, nz, closing) {
+    const push = Math.min(15, 3.5 + closing * 0.85);
+    playerCar.applyImpulse(nx * push, nz * push);
+    unit.car.applyImpulse(-nx * push * 0.3, -nz * push * 0.3);
+    const damage = Math.min(22, 3 + closing * 0.85);
+    playerCar.damage(damage);
+    playerCar.lastRam = this.time;
+    unit.ramCooldown = RAM_COOLDOWN;
+    unit.rams += 1;
+
+    if (closing > 6) {
+      this.state.raiseWanted(Math.min(5, this.state.wanted + 1));
+      this.escapeTimer = 0;
+    }
+    this.damagePlayer(damage * 0.25, unit.car);
+    if (this.onRam) this.onRam(damage, playerCar.position, closing, playerCar);
   }
 
   update(dt, player) {
@@ -377,7 +457,7 @@ export class Police {
     for (const unit of [...this.units]) {
       this.updateUnit(unit, dt, player);
       const distance = Math.hypot(unit.car.position.x - player.position.x, unit.car.position.z - player.position.z);
-      if (distance < 55) seen = true;
+      if (distance < 65) seen = true;
       // A cruiser that has lost you for a long time gives up and is taken off the board.
       if (distance > 150) {
         unit.lost = (unit.lost ?? 0) + dt;

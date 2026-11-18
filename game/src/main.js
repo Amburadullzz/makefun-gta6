@@ -112,6 +112,18 @@ police.onDamagePlayer = (amount) => {
   if (state.health <= 0) onPlayerDeath();
 };
 
+// A ram lands as a jolt and a thud, not a silent shove; the toast is rationed so a chase is not
+// a wall of text.
+police.onRam = (damage, position, closing) => {
+  if (game.mode !== 'playing') return;
+  cameraRig.kick(0.24 + Math.min(0.18, closing * 0.008));
+  audio.thud(position);
+  if (closing > 8 && game.elapsed - (game.lastRamToast ?? -10) > 6) {
+    game.lastRamToast = game.elapsed;
+    ui.toast('The cruiser hit you. Shake them.', 'danger', 2.6);
+  }
+};
+
 // ---------------------------------------------------------------- lifecycle
 
 function startNewGame() {
@@ -286,6 +298,7 @@ function step(dt) {
 
   if (player.inVehicle) {
     player.inVehicle.drive(dt, input);
+    player.inVehicle.updateEffects(dt);
     player.position.copy(player.inVehicle.position);
     if (input.pressed('enterExit')) handleEnterExit();
   } else {

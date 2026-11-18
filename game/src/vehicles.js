@@ -1,10 +1,18 @@
-// Cars: five distinct box-built models with lamps, wheels and a livery, the arcade driving model
-// behind them (throttle, brake, steering that tightens with speed, a handbrake slide), the
-// enter-and-exit dance, and the chase lights that make a police cruiser read at a distance.
+// Cars: five distinct box-built models with lamps, wheels and a livery, the driving model behind
+// them (a body with a heading, a speed along it and a little sideways slip, steering that turns in
+// proportion to speed, a handbrake slide, four-corner wall collision that reflects the velocity),
+// the enter-and-exit dance, and the chase lights that make a police cruiser read at a distance.
 import * as THREE from '../vendor/three.min.js';
 import { makeGlowTexture } from './geometry.js';
+import { WATER_X } from './city.js';
 
 const WHEEL_RADIUS = 0.36;
+const STEER_RATE = 1.55;            // rad/s of heading change at full lock and full authority
+const STEER_AUTHORITY_SPEED = 7;    // m/s at which the steering reaches full authority
+const GRIP = 7.5;                   // 1/s: how quickly the tyres scrub off sideways speed
+const HANDBRAKE_GRIP = 1.5;
+const MAX_SLIP = 14;                // m/s: a slide is a slide, not a spin
+const CORNER_INSET = 0.06;
 
 /** The models: one row each of proportions, colours and what makes it recognisable. */
 export const CAR_MODELS = {
@@ -90,6 +98,7 @@ export const CAR_MODELS = {
 /** A car: geometry, physics and the state the rest of the game reads. */
 export class Vehicle {
   constructor(scene, city, modelKey, options = {}) {
+    this.scene = scene;
     this.city = city;
     this.modelKey = modelKey;
     this.spec = CAR_MODELS[modelKey];
@@ -97,7 +106,13 @@ export class Vehicle {
     this.position = new THREE.Vector3(options.x ?? 0, 0, options.z ?? 0);
     this.heading = options.heading ?? 0;
     this.speed = 0;
+    this.slip = 0;
+    this.smoke = null;
+    this.smokeTimer = 0;
     this.steer = 0;
+    this.impact = 0;
+    this.drifting = false;
+    this.slipAngle = 0;
     this.health = 100;
     this.driver = null;
     this.isPlayerCar = false;
@@ -333,84 +348,322 @@ export class Vehicle {
     return Math.abs(this.speed) * 3.6;
   }
 
+  /** The velocity in world space: along the heading plus whatever the body is sliding sideways. */
+  get worldVelocity() {
+    const forwardX = Math.sin(this.heading);
+    const forwardZ = Math.cos(this.heading);
+    return {
+      x: forwardX * this.speed + Math.cos(this.heading) * this.slip,
+      z: forwardZ * this.speed - Math.sin(this.heading) * this.slip,
+    };
+  }
+
   /** Place the car somewhere, at rest, facing a heading. */
   placeAt(x, z, heading = this.heading) {
     this.position.set(x, this.city.groundAt(x, z), z);
     this.heading = heading;
     this.speed = 0;
+    this.slip = 0;
+    this.steer = 0;
+    this.impact = 0;
+    this.drifting = false;
     this.syncMesh();
   }
 
-  /** The arcade driving model: throttle, brake, steering that tightens with speed, handbrake. */
+  /**
+   * The driving model: a body with a heading, a speed along it and a little sideways slip.
+   * Steering turns the heading in proportion to speed (no pivoting on the spot), the tyres only
+   * hold so much sideways force, and the brake bites much harder than the drag.
+   */
   drive(dt, input) {
+    const handbrake = input.held('jump');
     if (this.health <= 0) {
       this.speed *= Math.exp(-2 * dt);
+      this.slip *= Math.exp(-3 * dt);
     } else {
       const throttle = input.held('forward') ? 1 : 0;
       const brake = input.held('back') ? 1 : 0;
-      const handbrake = input.held('jump');
+      const topSpeed = this.spec.topSpeed;
 
       if (throttle > 0) {
-        this.speed += this.spec.acceleration * dt * (1 - Math.min(1, Math.abs(this.speed) / this.spec.topSpeed));
+        this.speed += this.spec.acceleration * dt * (1 - Math.min(1, Math.max(0, this.speed) / topSpeed));
       }
       if (brake > 0) {
-        if (this.speed > 0.5) this.speed -= this.spec.acceleration * 1.9 * dt;
-        else this.speed -= this.spec.acceleration * 0.55 * dt;
+        // The brake is a stop, not a coast: it pulls the speed down at a fixed, firm rate.
+        const stopping = this.spec.acceleration * 0.45 + 11;
+        if (this.speed > 0.4) this.speed = Math.max(0, this.speed - stopping * dt);
+        else this.speed = Math.max(-topSpeed * 0.28, this.speed - this.spec.acceleration * 0.5 * dt);
       }
-      if (handbrake) this.speed *= Math.exp(-2.4 * dt);
+      if (handbrake) this.speed *= Math.exp(-1.9 * dt);
 
       // Rolling resistance and drag, so the car coasts to a stop.
-      this.speed *= Math.exp(-(0.32 + Math.abs(this.speed) * 0.006) * dt);
-      if (this.speed < -this.spec.topSpeed * 0.28) this.speed = -this.spec.topSpeed * 0.28;
-      if (this.speed > this.spec.topSpeed) this.speed = this.spec.topSpeed;
-      if (Math.abs(this.speed) < 0.05 && throttle === 0) this.speed = 0;
+      this.speed *= Math.exp(-(0.28 + Math.abs(this.speed) * 0.005) * dt);
+      if (this.speed > topSpeed) this.speed = topSpeed;
+      if (Math.abs(this.speed) < 0.04 && throttle === 0) this.speed = 0;
 
       const steerInput = input.axisX();
-      this.steer += (steerInput - this.steer) * Math.min(1, dt * 7);
-      const grip = handbrake ? 1.55 : 1;
-      const speedFactor = Math.min(1, Math.abs(this.speed) / 7);
-      const turnRate = 1.55 * grip * speedFactor * (this.speed < 0 ? -1 : 1);
-      this.heading += this.steer * turnRate * dt;
-      if (handbrake) this.speed *= Math.exp(-0.4 * dt);
+      this.steer += (steerInput - this.steer) * Math.min(1, dt * 8);
+      const authority = Math.min(1, Math.abs(this.speed) / STEER_AUTHORITY_SPEED);
+      const turnRate = this.steer * STEER_RATE * authority * (this.speed < 0 ? -1 : 1);
+      this.heading += turnRate * dt;
+      this.loseGripOnHardTurn(dt, turnRate, handbrake);
     }
 
     this.integrate(dt);
+  }
+
+  /**
+   * Lateral grip: the body resists sliding, but a fast turn asks for more sideways force than the
+   * tyres can give, so the tail steps out and the car keeps some of the direction it had. The
+   * handbrake drops the grip limit and lets the back end come round.
+   */
+  loseGripOnHardTurn(dt, turnRate, handbrake = false) {
+    const grip = handbrake ? HANDBRAKE_GRIP : GRIP;
+    const demand = Math.abs(turnRate * this.speed);   // m/s^2 the turn asks of the tyres
+    const limit = handbrake ? 6 : 15;
+    const excess = Math.min(1, Math.max(0, demand - limit) / 22);
+    // The car's momentum stays where it was pointing; the nose has already moved on.
+    this.slip -= turnRate * this.speed * dt * (0.5 + excess * 0.9);
+    this.slip *= Math.exp(-grip * dt);
+    this.slip = Math.max(-MAX_SLIP, Math.min(MAX_SLIP, this.slip));
+    // A slide scrubs speed off the tyres.
+    const slide = Math.abs(this.slip);
+    if (slide > 0.6) this.speed *= Math.exp(-slide * 0.012 * dt);
+    this.drifting = slide > 1.6;
+    this.slipAngle = Math.atan2(this.slip, Math.max(1, Math.abs(this.speed)));
   }
 
   /** Simple kinematics for a car nobody is driving: a speed and a heading, set from outside. */
   roll(dt, targetSpeed) {
     this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 3);
+    this.slip *= Math.exp(-4 * dt);
     this.integrate(dt);
   }
 
-  integrate(dt) {
-    const dx = Math.sin(this.heading) * this.speed * dt;
-    const dz = Math.cos(this.heading) * this.speed * dt;
-    this.position.x += dx;
-    this.position.z += dz;
+  /** Turn toward a heading at a rate the car can actually manage at this speed. */
+  steerToward(desiredHeading, dt, strength = 1) {
+    let difference = desiredHeading - this.heading;
+    while (difference > Math.PI) difference -= Math.PI * 2;
+    while (difference < -Math.PI) difference += Math.PI * 2;
+    const authority = Math.min(1, Math.abs(this.speed) / 6);
+    const maxTurn = 1.9 * strength * authority;
+    const turnRate = Math.max(-maxTurn, Math.min(maxTurn, difference * 2.6));
+    this.heading += turnRate * dt;
+    this.steer = Math.max(-1, Math.min(1, difference * 1.4));
+    this.slip -= turnRate * this.speed * dt * 0.4;
+    this.slip *= Math.exp(-GRIP * dt);
+    this.slip = Math.max(-MAX_SLIP, Math.min(MAX_SLIP, this.slip));
+    return difference;
+  }
 
-    const before = { x: this.position.x, z: this.position.z };
-    this.city.resolveCircle(this.position, 1.15);
-    const pushed = Math.hypot(this.position.x - before.x, this.position.z - before.z);
-    if (pushed > 0.001) {
-      // Hit a wall: lose most of the speed and take a little damage.
-      if (Math.abs(this.speed) > 6) this.damage(Math.abs(this.speed) * 0.5);
-      this.speed *= -0.18;
-    }
+  /** A shove in world space, from a ram: it changes both the speed and the sideways slip. */
+  applyImpulse(ix, iz) {
+    const forwardX = Math.sin(this.heading);
+    const forwardZ = Math.cos(this.heading);
+    const rightX = Math.cos(this.heading);
+    const rightZ = -Math.sin(this.heading);
+    this.speed += ix * forwardX + iz * forwardZ;
+    this.slip = Math.max(-MAX_SLIP, Math.min(MAX_SLIP, this.slip + ix * rightX + iz * rightZ));
+  }
+
+  /** Move the body, then settle its four corners against the city's walls. */
+  integrate(dt) {
+    const forwardX = Math.sin(this.heading);
+    const forwardZ = Math.cos(this.heading);
+    const rightX = Math.cos(this.heading);
+    const rightZ = -Math.sin(this.heading);
+
+    this.position.x += (forwardX * this.speed + rightX * this.slip) * dt;
+    this.position.z += (forwardZ * this.speed + rightZ * this.slip) * dt;
+
+    this.resolveBodyCollisions();
+
+    // The harbour wall and the city edges, the same limits the player on foot has.
+    const bounds = this.city.bounds;
+    this.position.x = Math.max(bounds.x0, Math.min(bounds.x1, this.position.x));
+    this.position.z = Math.max(bounds.z0, Math.min(bounds.z1, this.position.z));
+    if (this.city.isWater(this.position.x, this.position.z)) this.position.x = WATER_X - 2;
 
     this.position.y = this.city.groundAt(this.position.x, this.position.z);
     this.wheelSpin += (this.speed * dt) / WHEEL_RADIUS;
+    this.impact = Math.max(0, this.impact - dt * 12);
     this.syncMesh();
+  }
+
+  /**
+   * Tyre smoke, built the first time this car is driven: a small pool of sprites in the world,
+   * emitted at the rear wheels while the body is sliding. Only the player's car pays for it.
+   */
+  enableEffects() {
+    if (!this.smoke) this.smoke = new TyreSmoke(this.scene);
+  }
+
+  updateEffects(dt) {
+    if (!this.smoke) return;
+    this.smoke.update(dt);
+    const slide = Math.abs(this.slip);
+    if (slide < 2.2 || Math.abs(this.speed) < 4) return;
+    this.smokeTimer -= dt;
+    if (this.smokeTimer > 0) return;
+    this.smokeTimer = 0.05;
+    const backX = -Math.sin(this.heading) * (this.spec.length * 0.36);
+    const backZ = -Math.cos(this.heading) * (this.spec.length * 0.36);
+    const sideX = Math.cos(this.heading) * this.spec.width * 0.42;
+    const sideZ = -Math.sin(this.heading) * this.spec.width * 0.42;
+    const velocity = this.worldVelocity;
+    const strength = Math.min(1.5, slide / 3);
+    this.smoke.emit(this.position.x + backX + sideX, 0.32, this.position.z + backZ + sideZ, velocity.x, velocity.z, strength);
+    this.smoke.emit(this.position.x + backX - sideX, 0.32, this.position.z + backZ - sideZ, velocity.x, velocity.z, strength);
+  }
+
+  /**
+   * The body's four corners against the walls: push each corner back out of the building it has
+   * crossed, then reflect the velocity along the wall normal and lose speed on a hard hit.
+   */
+  resolveBodyCollisions() {
+    const cos = Math.cos(this.heading);
+    const sin = Math.sin(this.heading);
+    const halfWidth = this.spec.width / 2 - CORNER_INSET;
+    const halfLength = this.spec.length / 2 - CORNER_INSET;
+    const corners = [
+      [-halfWidth, halfLength],
+      [halfWidth, halfLength],
+      [-halfWidth, -halfLength],
+      [halfWidth, -halfLength],
+    ];
+
+    let pushX = 0;
+    let pushZ = 0;
+    let hits = 0;
+    for (const [ox, oz] of corners) {
+      const wx = this.position.x + cos * ox + sin * oz;
+      const wz = this.position.z - sin * ox + cos * oz;
+      const contact = this.city.wallContact(wx, wz, CORNER_INSET);
+      if (!contact) continue;
+      this.position.x += contact.nx * contact.depth;
+      this.position.z += contact.nz * contact.depth;
+      pushX += contact.nx * contact.depth;
+      pushZ += contact.nz * contact.depth;
+      hits += 1;
+    }
+    if (hits === 0) return;
+
+    const length = Math.hypot(pushX, pushZ);
+    if (length < 1e-6) return;
+    const nx = pushX / length;
+    const nz = pushZ / length;
+
+    const forwardX = sin;
+    const forwardZ = cos;
+    const rightX = cos;
+    const rightZ = -sin;
+    let vx = forwardX * this.speed + rightX * this.slip;
+    let vz = forwardZ * this.speed + rightZ * this.slip;
+    const intoWall = vx * nx + vz * nz;
+    if (intoWall >= 0) return;
+
+    const impact = -intoWall;
+    // Reflect the component that went into the wall and keep most of the component that ran
+    // along it: a hard hit loses its speed into the wall, a scrape keeps sliding.
+    const restitution = 0.22;
+    vx -= (1 + restitution) * intoWall * nx;
+    vz -= (1 + restitution) * intoWall * nz;
+    const scrape = Math.min(0.3, impact * 0.018);
+    vx *= 1 - scrape;
+    vz *= 1 - scrape;
+
+    this.speed = vx * forwardX + vz * forwardZ;
+    this.slip = Math.max(-MAX_SLIP, Math.min(MAX_SLIP, vx * rightX + vz * rightZ));
+    this.impact = impact;
+    if (impact > 4) this.damage(impact * 0.55);
   }
 
   syncMesh() {
     this.group.position.copy(this.position);
     this.group.rotation.y = this.heading;
-    for (const wheel of this.wheels) wheel.rotation.x = this.wheelSpin;
-    // A little body roll into the turn, and a squat under acceleration.
+    // The front wheels follow the steering; the rears just spin.
+    for (let i = 0; i < this.wheels.length; i += 1) {
+      const wheel = this.wheels[i];
+      wheel.rotation.x = this.wheelSpin;
+      wheel.rotation.y = i % 2 === 1 ? this.steer * 0.42 : 0;
+    }
+    // A little body roll into the turn, a squat under acceleration, and a lean out of a slide.
     if (this.body) {
-      this.body.rotation.z = -this.steer * Math.min(0.08, Math.abs(this.speed) * 0.003);
+      this.body.rotation.z = -this.steer * Math.min(0.1, Math.abs(this.speed) * 0.0035);
       this.body.rotation.x = Math.max(-0.04, Math.min(0.04, -this.speed * 0.0012));
+      this.body.rotation.y = Math.max(-0.09, Math.min(0.09, this.slip * 0.012));
+    }
+  }
+}
+
+/** A recycled pool of soft sprites: tyre smoke hanging over the road behind a sliding car. */
+class TyreSmoke {
+  constructor(scene) {
+    this.texture = makeGlowTexture('rgba(226,236,248,0.6)', 'rgba(206,220,238,0)');
+    this.puffs = [];
+    this.cursor = 0;
+    this.seed = 7;
+    for (let i = 0; i < 16; i += 1) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.texture,
+          color: 0xc6d2e2,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+        }),
+      );
+      sprite.visible = false;
+      scene.add(sprite);
+      this.puffs.push({ sprite, life: 0, max: 1, vx: 0, vy: 0, vz: 0 });
+    }
+  }
+
+  /** A deterministic 0..1, so a staged shot looks the same on every run. */
+  random() {
+    this.seed = (this.seed * 9301 + 49297) % 233280;
+    return this.seed / 233280;
+  }
+
+  emit(x, y, z, vx = 0, vz = 0, strength = 1) {
+    const puff = this.puffs[this.cursor];
+    this.cursor = (this.cursor + 1) % this.puffs.length;
+    puff.max = 0.6 + this.random() * 0.5;
+    puff.life = puff.max;
+    puff.vx = vx * 0.22 + (this.random() - 0.5) * 1.4;
+    puff.vy = 0.7 + this.random() * 0.9;
+    puff.vz = vz * 0.22 + (this.random() - 0.5) * 1.4;
+    puff.sprite.position.set(x, y, z);
+    puff.sprite.material.opacity = 0.4 * strength;
+    puff.sprite.scale.setScalar(1.5 + this.random() * 1.3);
+    puff.sprite.visible = true;
+  }
+
+  /** Hide every puff at once: the driver got out, so the smoke should not hang in the air. */
+  clear() {
+    for (const puff of this.puffs) {
+      puff.life = 0;
+      puff.sprite.visible = false;
+      puff.sprite.material.opacity = 0;
+    }
+  }
+
+  update(dt) {
+    for (const puff of this.puffs) {
+      if (puff.life <= 0) continue;
+      puff.life -= dt;
+      if (puff.life <= 0) {
+        puff.sprite.visible = false;
+        puff.sprite.material.opacity = 0;
+        continue;
+      }
+      const remaining = puff.life / puff.max;
+      puff.sprite.position.x += puff.vx * dt;
+      puff.sprite.position.y += puff.vy * dt;
+      puff.sprite.position.z += puff.vz * dt;
+      puff.vy *= Math.exp(-1.6 * dt);
+      puff.sprite.scale.setScalar(puff.sprite.scale.x + dt * 1.7);
+      puff.sprite.material.opacity = 0.42 * remaining;
     }
   }
 }
@@ -519,6 +772,7 @@ export class VehicleFleet {
     this.playerCar = car;
     car.isPlayerCar = true;
     car.setHeadlights(true, true);
+    car.enableEffects();
     player.inVehicle = car;
     player.setVisible(false);
     return car;
@@ -538,7 +792,9 @@ export class VehicleFleet {
     z = test.z;
     car.isPlayerCar = false;
     car.setHeadlights(false, false);
+    if (car.smoke) car.smoke.clear();
     player.teleport(x, z, car.heading - Math.PI / 2);
+    player.setVisible(true);
     player.inVehicle = null;
     this.playerCar = null;
     return car;

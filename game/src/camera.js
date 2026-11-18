@@ -127,28 +127,32 @@ export class CameraRig {
     this.pitch = Math.max(-0.2, Math.min(0.7, this.pitch + mouse.dy * MOUSE_SENSITIVITY * 0.5));
 
     const speedRatio = Math.min(1, Math.abs(vehicle.speed) / 40);
-    this.wantedDistance = 6.4 + speedRatio * 2.4;
+    this.wantedDistance = 6.6 + speedRatio * 2.2;
     this.fovTarget = 62 + speedRatio * 12;
 
+    // Look down the road, not at the boot: the camera sits behind the car and the look target
+    // runs ahead of it, further the faster it goes.
+    const lookAhead = 4.5 + speedRatio * 5.5;
     const focus = new THREE.Vector3(
-      vehicle.position.x - Math.sin(vehicle.heading) * 3.2,
-      vehicle.position.y + 1.9,
-      vehicle.position.z - Math.cos(vehicle.heading) * 3.2,
+      vehicle.position.x + Math.sin(vehicle.heading) * lookAhead,
+      vehicle.position.y + 1.35,
+      vehicle.position.z + Math.cos(vehicle.heading) * lookAhead,
     );
-    this.focus.lerp(focus, 1 - Math.exp(-10 * dt));
+    this.focus.lerp(focus, 1 - Math.exp(-9 * dt));
 
-    const height = 2.5 + this.pitch * 2.4;
+    const height = 2.4 + this.pitch * 2.4;
     const offset = new THREE.Vector3(
       Math.sin(this.yaw) * this.wantedDistance,
       height,
       Math.cos(this.yaw) * this.wantedDistance,
     );
-    const desired = this.focus.clone().add(offset);
+    const anchor = new THREE.Vector3(vehicle.position.x, vehicle.position.y, vehicle.position.z);
+    const desired = anchor.clone().add(offset);
     const floor = this.city.groundAt(desired.x, desired.z) + 1;
     if (desired.y < floor) desired.y = floor;
     const clear = this.city.cameraClearT(this.focus, desired);
     if (clear < 1) {
-      desired.copy(this.focus).add(offset.multiplyScalar(Math.max(0.3, clear)));
+      desired.copy(anchor).add(offset.multiplyScalar(Math.max(0.3, clear)));
       if (desired.y < floor) desired.y = floor;
     }
     this.position.lerp(desired, 1 - Math.exp(-9 * dt));

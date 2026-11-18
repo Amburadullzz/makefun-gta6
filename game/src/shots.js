@@ -4,7 +4,7 @@
 import * as THREE from '../vendor/three.min.js';
 
 export function setupShot(name, game) {
-  const { state, city, player, fleet, traffic, police, cameraRig, missions, ui, hud } = game;
+  const { state, city, player, cameraRig, missions, ui, hud } = game;
 
   game.invulnerable = true;
   game.mode = 'playing';
@@ -21,6 +21,10 @@ export function setupShot(name, game) {
   player.teleport(city.spots.bar.x + 4, city.spots.bar.z + 6, Math.PI);
   cameraRig.snapNext = true;
 
+  // Let the rain, the traffic and the city settle first, then stage the frame exactly: a staged
+  // pose must not be moved by the settling steps that follow it.
+  for (let i = 0; i < 24; i += 1) game.stepForShot(1 / 60);
+
   if (name === 'start') stageStart(game);
   else if (name === 'drive') stageDrive(game);
   else if (name === 'chase') stageChase(game);
@@ -29,53 +33,82 @@ export function setupShot(name, game) {
   // The camera is placed by hand here; keep the rig from pulling it back to the character.
   cameraRig.hold = true;
 
-  // Let the rain and the traffic settle for a moment, then hold the frame.
-  for (let i = 0; i < 24; i += 1) game.stepForShot(1 / 60);
   if (name === 'play') {
     // Pistol out, so the shot shows the character armed on the street.
     player.aiming = true;
     player.animate(0.016);
   }
-  if (name === 'drive' || name === 'chase') {
-    const car = fleet.playerCar;
+  if (name === 'drive') {
+    const car = game.fleet.playerCar;
     if (car) {
-      car.speed = name === 'chase' ? 19 : 16;
+      car.speed = 16;
       car.syncMesh();
-      cameraRig.updateForVehicle(0.016, car);
     }
   }
   game.frozen = true;
   hud.shownMoney = state.money;
   hud.money.textContent = `$${state.money.toLocaleString('en-US')}`;
   hud.update(0.016, game);
+  if (name === 'start') document.getElementById('prompt').classList.add('hidden');
 }
 
-/** The cover: the title over the harbour, a car waiting on the promenade, the skyline behind. */
+/**
+ * The cover: the title over the skyline, a lit street with traffic below, and the HUD up so the
+ * money, the stars, the minimap and the job all read at a glance.
+ */
 function stageStart(game) {
-  const { city, player, fleet, traffic, cameraRig, ui, hud } = game;
-  hud.show(false);
+  const { city, player, fleet, traffic, cameraRig, ui, hud, state, missions } = game;
+  hud.show(true);
+  hud.hidePrompt = true;
+  document.getElementById('hud').classList.add('cover');
   ui.showStart(false);
-  player.teleport(419, 268, Math.PI);
+
+  // A cover, not a menu: the menu is for players, and on the sheet it would sit on the HUD.
+  for (const selector of ['#start .menu', '#start .controls', '#start-note']) {
+    const element = document.querySelector(selector);
+    if (element) element.style.display = 'none';
+  }
+
+  state.money = 1240;
+  state.wanted = 2;
+  state.health = 100;
+  missions.title = 'COLD OPEN';
+  missions.text = 'Steal the Tern GT from Pier 9';
+  missions.marker = { x: city.spots.pier.x, z: city.spots.pier.z };
+  missions.markerGroup.position.set(missions.marker.x, 0.5, missions.marker.z);
+  missions.markerGroup.visible = true;
+
+  // Rook at the wheel of the Kestrel, coming up the avenue toward the camera with the lights on.
+  player.teleport(163.8, 376, 0);
   player.setVisible(true);
-
   const car = fleet.storyCars[1];
-  car.placeAt(424, 254, Math.PI);
+  car.placeAt(163.8, 376, 0);
+  fleet.enter(car, player);
   car.setHeadlights(true, true);
+  car.speed = 16;
+  car.syncMesh();
 
-  // A few cars on the waterfront road, headlights toward the city.
-  const others = traffic.cars.slice(0, 3);
-  others.forEach((trafficCar, index) => {
-    trafficCar.placeAt(412 + index * 6, 320 + index * 26, Math.PI);
-    trafficCar.setHeadlights(true, false);
-    trafficCar.speed = 0;
-  });
+  // Traffic down the avenue: headlights coming up, tail lights going away, and a pair crossing
+  // the junction so the street reads as a living one.
+  const [a, b, c, d, e, f, g, h] = traffic.cars;
+  placeTraffic(a, 163.8, 348, 0);
+  placeTraffic(b, 172.2, 334, Math.PI);
+  placeTraffic(c, 163.8, 316, 0);
+  placeTraffic(d, 172.2, 298, Math.PI);
+  placeTraffic(e, 140, 336, Math.PI / 2);
+  placeTraffic(f, 196, 336, -Math.PI / 2);
+  placeTraffic(g, 163.8, 284, 0);
+  placeTraffic(h, 172.2, 268, Math.PI);
+  traffic.cars[0].speed = 11;
+  traffic.cars[2].speed = 13;
 
-  cameraRig.yaw = 2.6;
+  // Low over the avenue, looking north into the towers: the title sits on the dark blocks at the
+  // left, the street and its headlights fill the bottom of the frame.
+  cameraRig.yaw = 0;
   cameraRig.pitch = 0.1;
-  cameraRig.snapTo(new THREE.Vector3(128, 22, 470), new THREE.Vector3(238, 38, 300));
-  game.camera.fov = 58;
+  cameraRig.snapTo(new THREE.Vector3(168, 13.5, 404), new THREE.Vector3(168, 22, 250));
+  game.camera.fov = 62;
   game.camera.updateProjectionMatrix();
-  void city;
 }
 
 /** On foot outside The Drowned Lamp: the character, the street, the HUD and the first job. */
@@ -109,6 +142,7 @@ function stagePlay(game) {
   cameraRig.snapTo(new THREE.Vector3(147.9, 2.4, 224.7), new THREE.Vector3(156.4, 1.45, 221.4));
   game.camera.fov = 60;
   game.camera.updateProjectionMatrix();
+  void city;
 }
 
 /** Behind the wheel on the avenue: traffic ahead, headlights on the road, the city going past. */
@@ -137,37 +171,70 @@ function stageDrive(game) {
   cameraRig.yaw = car.heading + Math.PI;
   cameraRig.pitch = 0.02;
   cameraRig.snapNext = true;
-  cameraRig.updateForVehicle(0.016, car);
   cameraRig.camera.position.set(car.position.x - 7.4, 3.1, car.position.z + 1.2);
   cameraRig.camera.lookAt(car.position.x + 6, 1.6, car.position.z);
   game.camera.fov = 70;
   game.camera.updateProjectionMatrix();
 }
 
-/** Three stars and two cruisers on the tail, with the job still on the HUD. */
+/**
+ * The chase: the player's car sideways from a hit, a cruiser alongside with its bar lit, a second
+ * closing behind, stars on the HUD, pursuit blips on the minimap and the job still running.
+ */
 function stageChase(game) {
-  const { city, player, fleet, traffic, police, cameraRig, missions, state, ui } = game;
+  const { city, player, fleet, traffic, police, cameraRig, missions, state, hud } = game;
+  hud.hidePrompt = true;
   const car = fleet.storyCars[1];
-  car.health = 100;
-  car.placeAt(172, 223.6, Math.PI / 2);
+  car.health = 74;
+  // Mid-drift: the nose is stepped out of the line the car is travelling on, the wheels are
+  // turned into the slide, and the cruiser that caused it is still alongside.
+  car.placeAt(206, 275.4, -Math.PI / 2 + 0.72);
   fleet.enter(car, player);
-  car.speed = 19;
+  car.speed = 20;
+  car.slip = -6;
+  car.steer = -0.9;
+  car.syncMesh();
+  car.enableEffects();
+  // A drift leaves a smear of tyre smoke behind the car; lay the trail along the line it came in on.
+  for (let i = 1; i <= 9; i += 1) {
+    const t = i / 9;
+    car.smoke.emit(
+      car.position.x + 1.2 + t * 4.2,
+      0.6 + t * 1.2,
+      car.position.z + 0.8 + t * 0.7,
+      4,
+      -1,
+      1.7 - t * 0.8,
+    );
+  }
+  car.smoke.update(0.02);
 
   state.money = 1990;
   state.wanted = 3;
   police.clearAll();
-  police.placeUnit(164, 220.4, Math.PI / 2);
-  police.placeUnit(152, 229.6, Math.PI / 2);
-  police.placeUnit(140, 215.6, Math.PI / 2);
+
+  const rammer = police.placeUnit(204.6, 279.2, -Math.PI / 2 + 0.28);
+  rammer.ramCooldown = 0.55;
+  rammer.rams = 2;
+  police.placeUnit(190, 275.4, -Math.PI / 2 + 0.05);
+  police.placeUnit(182, 284.6, Math.PI / 2);
   for (const unit of police.units) {
     unit.car.updateLightbar(0.05, true);
-    unit.car.speed = 20;
+    // Hold the bar in both colours for the still: red and blue together read as police at a glance.
+    unit.car.lightRed.color.setHex(0xff2b2b);
+    unit.car.lightBlue.color.setHex(0x3a7bff);
+    for (const halo of unit.car.halos) halo.material.opacity = 0.9;
+    unit.car.sirenPool.material.color.setHex(0xff2222);
+    unit.car.sirenPool.material.opacity = 0.35;
+    unit.car.setHeadlights(true, false);
+    unit.car.speed = 22;
   }
-  police.units[0].deploy();
+  // The cruiser alongside is close enough; its headlight pool would only wash the frame out.
+  police.units[0].car.headlightPool.visible = false;
   police.sirenOn = true;
 
-  placeTraffic(traffic.cars[0], 214, 214.6, -Math.PI / 2);
-  placeTraffic(traffic.cars[1], 250, 223.6, Math.PI / 2);
+  placeTraffic(traffic.cars[0], 232, 271.6, Math.PI / 2);
+  placeTraffic(traffic.cars[1], 168, 279.6, -Math.PI / 2);
 
   missions.title = 'BAD DEBTS';
   missions.text = 'Get back to The Drowned Lamp';
@@ -175,14 +242,14 @@ function stageChase(game) {
   missions.markerGroup.position.set(missions.marker.x, 0.5, missions.marker.z);
   missions.markerGroup.visible = true;
 
-  // Looking back down the avenue: the player's car in the foreground and the cruisers closing
-  // behind it, headlights and light bars toward the camera.
-  cameraRig.yaw = car.heading + Math.PI;
-  cameraRig.pitch = 0.1;
-  cameraRig.snapTo(new THREE.Vector3(181, 2.6, 229.5), new THREE.Vector3(162, 1.2, 220));
-  game.camera.fov = 64;
+  // Behind and to the left of the player, so the drifting car and the cruiser beside it both fill
+  // the frame, with the third unit's headlights coming the other way.
+  cameraRig.yaw = -Math.PI / 2;
+  cameraRig.pitch = 0.12;
+  cameraRig.snapTo(new THREE.Vector3(215.4, 3.9, 271.2), new THREE.Vector3(200, 1.5, 277));
+  game.camera.fov = 66;
   game.camera.updateProjectionMatrix();
-  ui.toast('Del: "Three stars, Rook. Lose them before the bridge."', 'danger', 60);
+  void city;
 }
 
 function placeTraffic(car, x, z, heading) {
