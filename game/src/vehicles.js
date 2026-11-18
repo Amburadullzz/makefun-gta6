@@ -88,7 +88,7 @@ export const CAR_MODELS = {
     cabinHeight: 0.56,
     cabinLength: 2.2,
     wheelbase: 3.0,
-    colours: [0x101820],
+    colours: [0x232f3f],
     topSpeed: 40,
     acceleration: 22,
     police: true,
@@ -133,11 +133,18 @@ export class Vehicle {
 
   build() {
     const spec = this.spec;
-    const paint = new THREE.MeshLambertMaterial({ color: this.colour });
-    const paintDark = new THREE.MeshLambertMaterial({ color: darken(this.colour, 0.62) });
-    const glass = new THREE.MeshLambertMaterial({ color: 0x11161d, emissive: 0x0a1119 });
-    const rubber = new THREE.MeshLambertMaterial({ color: 0x14161a });
-    const trim = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
+    // The paint carries a little of its own colour even in shadow: a body that is only lit from
+    // outside turns into a silhouette on a night street, and a silhouette is what a thumbnail
+    // loses first. The emissive is the paint at a third strength, so the shape still shades.
+    const paint = new THREE.MeshLambertMaterial({
+      color: this.colour,
+      emissive: darken(this.colour, 0.34),
+      emissiveIntensity: 1,
+    });
+    const paintDark = new THREE.MeshLambertMaterial({ color: darken(this.colour, 0.62), emissive: darken(this.colour, 0.16) });
+    const glass = new THREE.MeshLambertMaterial({ color: 0x1b2530, emissive: 0x121d29 });
+    const rubber = new THREE.MeshLambertMaterial({ color: 0x1e2126, emissive: 0x0d0f12 });
+    const trim = new THREE.MeshLambertMaterial({ color: 0x3a3f47, emissive: 0x161a1f });
 
     this.body = new THREE.Group();
     this.group.add(this.body);
@@ -211,10 +218,16 @@ export class Vehicle {
     }
 
     if (spec.police) {
-      // The livery: a white door panel and the light bar.
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(spec.width + 0.02, 0.3, spec.length * 0.5), new THREE.MeshLambertMaterial({ color: 0xe8eef5 }));
-      stripe.position.set(0, 0.62, 0);
+      // The livery: a black-and-white cruiser. The doors and the roof are white and the nose and
+      // tail stay dark, so the car reads as police by shape and by value long before the bar is
+      // close enough to see — which is what a thumbnail needs.
+      const livery = new THREE.MeshLambertMaterial({ color: 0xeef3f9, emissive: 0x39424c });
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(spec.width + 0.03, 0.62, spec.length * 0.66), livery);
+      stripe.position.set(0, 0.68, 0);
       this.body.add(stripe);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(spec.width * 0.88, 0.12, spec.cabinLength * 0.94), livery);
+      roof.position.set(0, 0.5 + spec.bodyHeight + spec.cabinHeight - 0.2, -0.15);
+      this.body.add(roof);
       const bar = new THREE.Group();
       bar.position.set(0, 0.5 + spec.bodyHeight + spec.cabinHeight - 0.1, -0.1);
       this.lightRed = new THREE.MeshBasicMaterial({ color: 0xff1a1a, toneMapped: false });

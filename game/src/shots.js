@@ -8,7 +8,7 @@ export function setupShot(name, game) {
 
   game.invulnerable = true;
   game.mode = 'playing';
-  game.renderer.toneMappingExposure = name === 'start' ? 1.85 : 1.55;
+  game.renderer.toneMappingExposure = name === 'start' ? 2.15 : 1.9;
   missions.frozen = true;
   ui.hideStart();
   ui.hidePause();
@@ -171,7 +171,7 @@ function stagePlay(game) {
   const { city, player, traffic, fleet, cameraRig, missions, state } = game;
   player.teleport(152, 223, Math.PI / 2);
   player.setVisible(true);
-  player.yaw = Math.PI / 2;
+  player.yaw = Math.PI / 2 + 0.62;
   player.walkPhase = 1.1;
   state.money = 1240;
   state.wanted = 0;
@@ -196,11 +196,12 @@ function stagePlay(game) {
   missions.markerGroup.position.set(171, 0.5, 217);
   missions.markerGroup.visible = true;
 
-  // A low camera behind Rook, looking down the pavement at the bar's neon.
+  // A low camera behind Rook's shoulder, looking down the pavement past the job marker: he fills
+  // a third of the frame's height, and the street he is about to cross runs away from him.
   cameraRig.yaw = Math.PI / 2;
   cameraRig.pitch = 0.1;
-  cameraRig.snapTo(new THREE.Vector3(147.9, 2.4, 224.7), new THREE.Vector3(156.4, 1.45, 221.4));
-  game.camera.fov = 60;
+  cameraRig.snapTo(new THREE.Vector3(148.6, 2.3, 224.5), new THREE.Vector3(156.8, 1.45, 221.2));
+  game.camera.fov = 58;
   game.camera.updateProjectionMatrix();
   void city;
 }
@@ -271,6 +272,15 @@ function stageChase(game) {
   }
   car.smoke.update(0.02);
 
+  // The cover carries the name: one line over the empty sky between the money and the minimap,
+  // with the menu stripped out. The scene is the picture, so the title is the simple part.
+  document.getElementById('hud').classList.add('cover');
+  document.getElementById('cover-title').classList.remove('hidden');
+  for (const selector of ['#start .menu', '#start .controls', '#start-note']) {
+    const element = document.querySelector(selector);
+    if (element) element.style.display = 'none';
+  }
+
   state.money = 1990;
   state.wanted = 3;
   police.clearAll();
@@ -285,12 +295,22 @@ function stageChase(game) {
     // Hold the bar in both colours for the still: red and blue together read as police at a glance.
     unit.car.lightRed.color.setHex(0xff2b2b);
     unit.car.lightBlue.color.setHex(0x3a7bff);
-    for (const halo of unit.car.halos) halo.material.opacity = 0.9;
+    for (const halo of unit.car.halos) {
+      halo.material.opacity = 0.55;
+      // A halo wide enough to cover the roof washes the middle of the frame out once the frame is
+      // shrunk; keep it tight around the bar.
+      halo.scale.set(5.2, 5.2, 1);
+    }
     unit.car.sirenPool.material.color.setHex(0xff2222);
-    unit.car.sirenPool.material.opacity = 0.35;
+    unit.car.sirenPool.material.opacity = 0.12;
     unit.car.setHeadlights(true, false);
     unit.car.speed = 22;
   }
+  // The cruiser beside the player is the brightest thing in the frame; its wash would eat the
+  // player's car, so it keeps only the bar, and the two behind it drop their headlight pools so
+  // the mid-ground reads as cars instead of one merged glow.
+  if (police.units[0]) police.units[0].car.sirenPool.material.opacity = 0.05;
+  for (const unit of police.units.slice(1)) unit.car.headlightPool.visible = false;
   // The cruiser alongside is close enough; its headlight pool would only wash the frame out.
   police.units[0].car.headlightPool.visible = false;
   police.sirenOn = true;
@@ -298,8 +318,8 @@ function stageChase(game) {
   placeTraffic(traffic.cars[0], 232, 271.6, Math.PI / 2);
   placeTraffic(traffic.cars[1], 168, 279.6, -Math.PI / 2);
 
-  missions.title = 'BAD DEBTS';
-  missions.text = 'Get back to The Drowned Lamp';
+  missions.title = 'SALT RUN';
+  missions.text = "Ram Corso's coupe off the Strip";
   missions.marker = { x: city.spots.bar.x, z: city.spots.bar.z };
   missions.markerGroup.position.set(missions.marker.x, 0.5, missions.marker.z);
   missions.markerGroup.visible = true;

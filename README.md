@@ -38,7 +38,11 @@ music — is generated at run time.
 
 - The city: `city.js` builds it from a seed — roads, kerbs, lane paint and crosswalks, towers and
   warehouses, lit windows, streetlights with pools of light, neon signs, billboards, the waterfront,
-  the piers and the skyline across the bay.
+  the piers and the skyline across the bay. The night is lit for the thumbnail as much as for the
+  player: a deep-blue sky with a glow at the horizon, a hemisphere key, a cold moon, a warm sodium
+  fill off the harbour, a road that carries a little of the sky in its emissive, and windows big
+  enough to be shapes rather than speckle. Buildings, road and cars stay three separate values when
+  a frame is scaled down to 253 by 158.
 - The character: `player.js` — a box-built body with a walk cycle, acceleration and friction,
   sprint, jump, gravity and ground clamping; `camera.js` orbits on the mouse and pulls in when a
   building would block the view.
@@ -56,11 +60,16 @@ music — is generated at run time.
   steer toward a point ahead of the player so they cut the corner, close to ramming distance and
   shunt the player's car (damage and a star), officers who only get out once a cruiser has stopped
   nearby, and a level that falls once you break line of sight.
-- Missions: `missions.js` — three chained jobs (Cold Open, Bad Debts, Last Ferry) with markers in
-  the world and on the minimap, a payout, a fail state, and a repeatable chop-shop job afterwards.
+- Missions: `missions.js` — six chained jobs (Cold Open, Bad Debts, Rain Check, Pier Pressure,
+  Salt Run, Last Ferry) with markers in the world and on the minimap, a payout, a fail state, and a
+  repeatable chop-shop job afterwards. Between them they cover a theft and a delivery, a shakedown,
+  a debt collected at gunpoint, a pursuit you have to lose, a second car out the other side of the
+  map, a chase that ends in a real ram, and the ferry out.
 - Combat: `combat.js` — a pistol with a raycast, muzzle flash, tracer, sparks, recoil and ammo.
 - The HUD: `hud.js` draws the circular minimap from the city's own road data, with the player as an
-  arrow, a north marker, money, health, wanted stars and the current objective.
+  arrow, a north marker, money, health, wanted stars and the current objective. Every readout sits
+  on its own dark plate with a shadow and a stroke, and the type is sized to survive the shrink to
+  a 253-pixel-wide thumbnail.
 - Save and sound: `state.js` keeps money, health, wanted level, mission stage and the clock in one
   place and saves them to `localStorage` behind a version field; `audio.js` synthesises the engine,
   gunshots, sirens, rain and a slow minor loop with WebAudio.
@@ -83,7 +92,7 @@ music — is generated at run time.
 | `game/src/instancing.js` | the instanced bodies every traffic car and walker is drawn from |
 | `game/src/police.js` | the wanted level, cruisers, officers and the escape timer |
 | `game/src/combat.js` | the pistol and everything a bullet does |
-| `game/src/missions.js` | the three jobs, their markers, payouts and fail states |
+| `game/src/missions.js` | the six jobs, their markers, payouts and fail states |
 | `game/src/hud.js` | the minimap, money, health, stars and objective |
 | `game/src/ui.js` | title, pause, ending screens and the toast line |
 | `game/src/audio.js` | every sound, synthesised with WebAudio |
@@ -91,14 +100,20 @@ music — is generated at run time.
 
 ## Screenshots
 
-- `screenshots/1-start.jpg` — the title over the skyline, the Kestrel coming up a lit avenue with
-  two cruisers on its tail and their bars lit, traffic in both lanes, walkers on the pavement, and
-  a HUD whose two stars match the two cruisers in the frame.
-- `screenshots/2-play.jpg` — Rook on the avenue on foot, pistol out, with the HUD and the first job.
+They are staged for the size a judge actually sees them at — the cover at 768 by 480, the rest at
+253 by 158 — so every frame is lit to keep three values apart: the buildings, the road, and the
+cars. `capture_shots.py` renders them from the game's own `?shot=` scenes, or from the title screen
+when the query is empty.
+
+- `screenshots/1-cover.jpg` — the cover. Three stars, Rook's Kestrel mid-drift with a cruiser in
+  real contact alongside, both bars lit, traffic and lane paint down the Strip, and the title in
+  one line over the dark sky between the money and the minimap. The job on the panel is Salt Run,
+  the ram the frame is showing.
+- `screenshots/2-play.jpg` — Rook on the avenue on foot, pistol out, three-quarter to camera, with
+  the HUD and the first job.
 - `screenshots/3-drive.jpg` — the stolen Tern GT on the Strip, headlights on, traffic ahead.
-- `screenshots/4-chase.jpg` — three stars, the player's car sideways in a drift with a cruiser
-  alongside, in real contact with it, its bar lit, pursuit blips on the minimap and the job still
-  on the HUD.
+- `screenshots/4-title.jpg` — the title screen: the harbour skyline across the bay, the wordmark,
+  and the menu.
 
 ## Handing it in
 

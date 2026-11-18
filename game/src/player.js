@@ -47,7 +47,7 @@ export class Player {
   buildBody() {
     // A little self-illumination keeps the character readable against wet asphalt at night.
     const material = (colour) =>
-      new THREE.MeshLambertMaterial({ color: colour, emissive: new THREE.Color(colour).multiplyScalar(0.22) });
+      new THREE.MeshLambertMaterial({ color: colour, emissive: new THREE.Color(colour).multiplyScalar(0.3) });
 
     this.body = new THREE.Group();
     this.group.add(this.body);

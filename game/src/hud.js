@@ -133,7 +133,7 @@ export class Hud {
     ctx.beginPath();
     ctx.arc(centre, centre, mapRadius, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = '#080d13';
+    ctx.fillStyle = '#0d1621';
     ctx.fillRect(0, 0, size, size);
 
     // Rotate the map so the camera's forward is up.
@@ -144,17 +144,17 @@ export class Hud {
     ctx.translate(-focusX, -focusZ);
 
     // The bay on the east side.
-    ctx.fillStyle = '#123a4f';
+    ctx.fillStyle = '#1b5570';
     ctx.fillRect(WATER_X, -400, 900, 1200);
-    ctx.fillStyle = '#1d3d42';
+    ctx.fillStyle = '#27605e';
     ctx.fillRect(PROMENADE_X, -14, WATER_X - PROMENADE_X, 418);
 
     // Blocks, then the streets over them.
-    ctx.fillStyle = '#232e3a';
+    ctx.fillStyle = '#2f3d4d';
     for (const block of this.city.blocks) {
       ctx.fillRect(block.x0, block.z0, block.x1 - block.x0, block.z1 - block.z0);
     }
-    ctx.strokeStyle = '#57667a';
+    ctx.strokeStyle = '#8b9db2';
     ctx.lineWidth = ROAD_WIDTH;
     ctx.lineCap = 'square';
     ctx.beginPath();

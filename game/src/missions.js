@@ -1,12 +1,15 @@
-// The night's work: three jobs that chain from one to the next, each a list of stages with an
-// objective, a marker in the world, a reward and a way to fail. After the third the city keeps
+// The night's work: six jobs that chain from one to the next, each a list of stages with an
+// objective, a marker in the world, a reward and a way to fail. After the sixth the city keeps
 // paying for cars delivered to Marrow Motors, so there is always a reason to steal one more.
 import * as THREE from '../vendor/three.min.js';
 import { Gunman } from './police.js';
+import { Vehicle } from './vehicles.js';
 
 const MISSION_DELAY = 3.5;
 const SIDE_JOB_REWARD = 80;
 const SIDE_JOB_COOLDOWN = 40;
+const RAM_REACH = 5.4;              // metres between two bodies that counts as a hit
+const RAM_CLOSING = 4;              // m/s of closing speed before a hit is a ram and not a nudge
 
 export class Missions {
   constructor(scene, city, state, ui, audio, police, traffic, fleet, combat) {
@@ -33,6 +36,10 @@ export class Missions {
     this.text = 'Find Del at The Drowned Lamp.';
     this.marker = null;
     this.markerColour = 0xffc46b;
+    // The chase car of the ram job, and whether the player has put it in the wall yet.
+    this.chaseTarget = null;
+    this.rammed = false;
+    this.lastGap = Infinity;
 
     this.buildMarker();
     this.buildDel();
@@ -80,12 +87,12 @@ export class Missions {
             marker: () => ({ x: spots.warehouse.x, z: spots.warehouse.z }),
             done: (game) => distanceTo(spots.warehouse.x, spots.warehouse.z)(game) < 13,
             enter: () => {
-              this.ui.toast('Del: "Corso Vane is skimming the whole dock. His two boys are inside. Make it loud."', 'story');
+              this.ui.toast('Del: "Corso Vane owes us four thousand and he has stopped answering. His two boys are inside with it. Make it loud."', 'story');
               this.spawnEnforcers(spots.warehouse);
             },
           },
           {
-            text: 'Take out Corso\'s enforcers',
+            text: 'Collect the debt from Corso\'s enforcers',
             marker: () => ({ x: spots.warehouse.x, z: spots.warehouse.z }),
             counter: () => ({ done: this.enforcers.filter((man) => man.dead).length, total: this.enforcers.length }),
             done: () => this.enforcers.length > 0 && this.enforcers.every((man) => man.dead),
@@ -98,7 +105,80 @@ export class Missions {
         ],
         reward: 750,
         start: () =>
-          this.ui.toast('Del: "Corso Vane runs Salt Court. Go and explain to his boys that the dock is ours now."', 'story'),
+          this.ui.toast('Del: "Corso Vane runs Salt Court and he is into us for four thousand. Go and collect."', 'story'),
+      },
+      {
+        // The pursuit job: the police are the objective, so the level is raised on purpose and the
+        // only way to finish is to be out of their sight long enough for the escape timer to run.
+        id: 'rain-check',
+        title: 'RAIN CHECK',
+        stages: [
+          {
+            text: 'Pull the harbour police off the Strip',
+            marker: () => ({ x: spots.plaza.x, z: spots.plaza.z }),
+            done: (game) => distanceTo(spots.plaza.x, spots.plaza.z)(game) < 30,
+            enter: () => {
+              this.state.raiseWanted(3);
+              this.police.syncWanted();
+              this.ui.toast('Del: "Every cruiser on the harbour is watching this bar. Take a car up the Strip and be worth following."', 'story');
+            },
+          },
+          {
+            text: 'Shake them in the rain',
+            marker: () => ({ x: spots.bar.x, z: spots.bar.z }),
+            done: () => this.state.wanted === 0,
+          },
+        ],
+        reward: 900,
+        start: () => this.ui.toast('Del: "Corso put a tail on us. Go and be loud somewhere else for an hour."', 'story'),
+      },
+      {
+        // A steal-and-deliver job pointed the other way round the map: the car waits at the ferry
+        // terminal and the buyer waits at the pier.
+        id: 'pier-pressure',
+        title: 'PIER PRESSURE',
+        stages: [
+          {
+            text: 'Steal the Kestrel S from the Ferry Terminal',
+            marker: () => ({ x: spots.marina.x, z: spots.marina.z }),
+            done: () => fleet.playerCar === fleet.storyCars[1],
+          },
+          {
+            text: 'Run the Kestrel S out to Pier 9',
+            marker: () => ({ x: spots.pier.x, z: spots.pier.z }),
+            done: (game) => game.fleet.playerCar === fleet.storyCars[1] && distanceTo(spots.pier.x, spots.pier.z)(game) < 18,
+          },
+        ],
+        reward: 1200,
+        failed: () => fleet.storyCars[1].health <= 0,
+        failText: 'The Kestrel S is wrecked. The buyer walks away.',
+        start: () => {
+          const kestrel = fleet.storyCars[1];
+          if (kestrel.health <= 0) kestrel.health = 100;
+          if (fleet.playerCar !== kestrel) kestrel.placeAt(spots.marina.x - 7, spots.marina.z + 9, Math.PI / 2);
+          this.ui.toast('Del: "A buyer at Pier 9 wants a Kestrel S tonight. There is one at the ferry terminal, still warm."', 'story');
+        },
+      },
+      {
+        // The chase that ends in a ram: a target car really drives the avenue, and the stage is
+        // only done when the player's car closes on it fast enough for a hit.
+        id: 'salt-run',
+        title: 'SALT RUN',
+        stages: [
+          {
+            text: "Ram Corso's coupe off the Strip",
+            marker: () =>
+              this.chaseTarget
+                ? { x: this.chaseTarget.position.x, z: this.chaseTarget.position.z }
+                : { x: spots.plaza.x, z: spots.plaza.z },
+            done: () => this.rammed,
+          },
+        ],
+        reward: 1600,
+        start: () => {
+          this.spawnChaseCar(spots.plaza);
+          this.ui.toast('Del: "Corso is in a black coupe running the Strip. He does not stop. Put him in the wall."', 'story');
+        },
       },
       {
         id: 'last-ferry',
@@ -126,7 +206,7 @@ export class Missions {
             failText: 'The ferry left without you.',
           },
         ],
-        reward: 2000,
+        reward: 2500,
         start: () => this.ui.toast('Del: "One more run, Rook. Then we both get out of this city."', 'story'),
       },
     ];
@@ -212,6 +292,92 @@ export class Missions {
     this.police.reportCrime('mission', spot);
   }
 
+  /**
+   * Corso's coupe: a real car with a real position, driving the avenue away from the player. It is
+   * pushed into the same contact pass as every other car, so a ram is a hit the physics resolves
+   * and not a scripted animation.
+   */
+  spawnChaseCar(spot) {
+    this.clearChaseCar();
+    const lane = spot.z - 4;
+    const car = new Vehicle(this.scene, this.city, 'coupe', {
+      x: spot.x + 34,
+      z: lane,
+      heading: Math.PI / 2,
+      colour: 0x1c1f24,
+    });
+    car.placeAt(spot.x + 34, lane, Math.PI / 2);
+    car.speed = 21;
+    car.setHeadlights(true, false);
+    car.isChaseTarget = true;
+    car.storyName = "Corso's coupe";
+    this.fleet.cars.push(car);
+    this.chaseTarget = car;
+    this.rammed = false;
+    this.lastGap = Infinity;
+    return car;
+  }
+
+  clearChaseCar() {
+    const car = this.chaseTarget;
+    this.chaseTarget = null;
+    this.rammed = false;
+    this.lastGap = Infinity;
+    if (!car) return;
+    this.fleet.cars = this.fleet.cars.filter((other) => other !== car);
+    this.scene.remove(car.group);
+  }
+
+  /** Run the coupe up and down the Strip, turning at the promenade and the west end. */
+  driveChaseCar(dt) {
+    const car = this.chaseTarget;
+    if (!car || car.health <= 0) return;
+    if (car.position.x > 366) car.heading = -Math.PI / 2;
+    else if (car.position.x < 18) car.heading = Math.PI / 2;
+    car.speed = 21;
+    car.position.x += Math.sin(car.heading) * car.speed * dt;
+    car.position.z += Math.cos(car.heading) * car.speed * dt;
+    car.position.y = this.city.groundAt(car.position.x, car.position.z);
+    car.syncMesh();
+  }
+
+  /**
+   * A ram, measured rather than declared: the gap between the two bodies has to close inside the
+   * reach of their bumpers, and it has to close fast. The coupe takes the shove along the line
+   * between the two cars, the player's car loses speed with the hit.
+   */
+  checkRam(dt, game) {
+    const target = this.chaseTarget;
+    if (!target || this.rammed) return;
+    const car = game.player.inVehicle;
+    if (!car) {
+      this.lastGap = Infinity;
+      return;
+    }
+    const dx = target.position.x - car.position.x;
+    const dz = target.position.z - car.position.z;
+    const gap = Math.hypot(dx, dz);
+    const closing = (this.lastGap - gap) / Math.max(dt, 1e-4);
+    this.lastGap = gap;
+    if (gap > RAM_REACH || closing < RAM_CLOSING) return;
+    const nx = dx / (gap || 1);
+    const nz = dz / (gap || 1);
+    target.applyImpulse(nx * 9, nz * 9);
+    target.damage(45);
+    car.applyImpulse(-nx * 3.5, -nz * 3.5);
+    car.speed *= 0.55;
+    this.rammed = true;
+    // The numbers the hit was measured with, kept for the headless check to read back.
+    this.ramInfo = {
+      gapMetres: Math.round(gap * 100) / 100,
+      closingSpeed: Math.round(closing * 10) / 10,
+      coupeHealth: target.health,
+      playerSpeedAfter: Math.round(car.speed * 10) / 10,
+    };
+    this.audio.thud(car.position);
+    this.ui.toast('Corso is in the wall.', 'money', 3);
+  }
+
   rngForEnforcer() {
     // A small deterministic generator so the two enforcers differ but always differ the same way.
     let state = (this.index * 9301 + 49297) % 233280;
@@ -264,6 +430,7 @@ export class Missions {
     this.state.save();
     this.enforcers = [];
     this.delVisible = false;
+    this.clearChaseCar();
     this.delay = MISSION_DELAY;
     this.marker = null;
     this.markerGroup.visible = false;
@@ -290,6 +457,7 @@ export class Missions {
     this.state.missionStage = 0;
     this.enforcers = [];
     this.delVisible = false;
+    this.clearChaseCar();
     this.timer = 0;
     this.police.clearAll();
     this.state.setWanted(0);
@@ -325,13 +493,21 @@ export class Missions {
     const player = game.player;
     if (this.frozen) return;
 
-    if (this.timer > 0 && this.current?.id === 'last-ferry') {
+    if (this.timer > 0) {
       this.timer -= dt;
       if (this.timer <= 0) {
-        this.fail('The ferry left without you.');
-        return;
+        const timed = this.currentStage;
+        if (timed?.fail && timed.fail()) {
+          this.fail(timed.failText ?? 'Out of time.');
+          return;
+        }
       }
     }
+
+    // The coupe keeps running whether or not the stage is being judged, and the hit is tested
+    // before the stage reads it.
+    this.driveChaseCar(dt);
+    this.checkRam(dt, game);
 
     if (this.delay > 0) {
       this.delay -= dt;

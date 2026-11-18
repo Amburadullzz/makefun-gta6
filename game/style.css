@@ -45,13 +45,19 @@ html, body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
 }
 
+/* Every readout sits on its own dark plate: the scene behind it can be a lit shopfront or a
+   black alley, and the number has to be the same number either way. */
 #hud-left {
   position: absolute;
-  top: 22px;
-  left: 26px;
+  top: 18px;
+  left: 18px;
+  padding: 10px 20px 12px 14px;
+  background: linear-gradient(100deg, rgba(4, 8, 14, 0.88), rgba(4, 8, 14, 0.62) 72%, rgba(4, 8, 14, 0.18));
+  border-left: 3px solid rgba(125, 255, 176, 0.75);
+  border-radius: 3px;
 }
 
 #money-row {
@@ -61,16 +67,16 @@ html, body {
 }
 
 #money {
-  font-size: 54px;
+  font-size: 66px;
   font-weight: 800;
   letter-spacing: 0.5px;
   color: var(--green);
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 18px rgba(125, 255, 176, 0.45), 0 2px 4px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 0 22px rgba(125, 255, 176, 0.5), 0 3px 6px rgba(0, 0, 0, 1), 0 0 2px rgba(0, 0, 0, 1);
 }
 
 #money-label {
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 2.4px;
   text-transform: uppercase;
   color: var(--dim);
@@ -78,21 +84,22 @@ html, body {
 
 #stars {
   display: flex;
-  gap: 5px;
-  margin-top: 6px;
-  font-size: 30px;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 40px;
   line-height: 1;
   letter-spacing: 1px;
 }
 
 #stars span {
-  color: rgba(160, 175, 195, 0.28);
+  color: rgba(150, 168, 190, 0.3);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
   transition: color 140ms linear, text-shadow 140ms linear;
 }
 
 #stars span.lit {
   color: var(--amber);
-  text-shadow: 0 0 12px rgba(255, 196, 107, 0.8);
+  text-shadow: 0 0 16px rgba(255, 196, 107, 0.9), 0 2px 4px rgba(0, 0, 0, 1);
 }
 
 #stars span.flash {
@@ -102,9 +109,13 @@ html, body {
 
 #hud-right {
   position: absolute;
-  top: 20px;
-  right: 24px;
+  top: 16px;
+  right: 18px;
   width: 240px;
+  padding: 8px 8px 10px;
+  background: linear-gradient(260deg, rgba(4, 8, 14, 0.88), rgba(4, 8, 14, 0.55) 70%, rgba(4, 8, 14, 0.12));
+  border-right: 3px solid rgba(255, 196, 107, 0.7);
+  border-radius: 3px;
 }
 
 #minimap-frame {
@@ -112,7 +123,7 @@ html, body {
   width: 240px;
   height: 240px;
   border-radius: 50%;
-  border: 2px solid rgba(170, 200, 225, 0.34);
+  border: 3px solid rgba(190, 215, 240, 0.55);
   box-shadow: 0 0 0 6px rgba(5, 8, 13, 0.55), 0 10px 30px rgba(0, 0, 0, 0.6),
     inset 0 0 30px rgba(0, 0, 0, 0.7);
   overflow: hidden;
@@ -139,9 +150,10 @@ html, body {
 #clock-row {
   display: flex;
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: 10px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 1.6px;
   color: var(--dim);
   text-transform: uppercase;
@@ -153,9 +165,9 @@ html, body {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 3px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.7px;
   text-transform: uppercase;
   color: rgba(150, 168, 190, 0.75);
@@ -169,28 +181,31 @@ html, body {
 
 #objective {
   position: absolute;
-  left: 26px;
-  bottom: 104px;
-  max-width: 580px;
-  padding: 12px 18px 13px 18px;
-  background: linear-gradient(90deg, rgba(8, 12, 19, 0.86), rgba(8, 12, 19, 0.25));
-  border-left: 3px solid var(--amber);
+  left: 18px;
+  bottom: 108px;
+  max-width: 660px;
+  padding: 13px 26px 15px 18px;
+  background: linear-gradient(90deg, rgba(5, 9, 15, 0.94), rgba(5, 9, 15, 0.72) 78%, rgba(5, 9, 15, 0.2));
+  border-left: 4px solid var(--amber);
   border-radius: 3px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
 }
 
 #objective-title {
-  font-size: 13px;
-  letter-spacing: 3px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 3.4px;
   text-transform: uppercase;
   color: var(--amber);
   margin-bottom: 3px;
 }
 
 #objective-text {
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: #f2f6fc;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.24;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 1), 0 0 2px rgba(0, 0, 0, 1);
 }
 
 #objective-text .count {
@@ -199,12 +214,12 @@ html, body {
 
 #health-frame {
   position: absolute;
-  left: 26px;
-  bottom: 54px;
-  width: 300px;
-  height: 18px;
-  border: 1px solid rgba(180, 200, 220, 0.35);
-  background: rgba(6, 10, 15, 0.7);
+  left: 18px;
+  bottom: 52px;
+  width: 330px;
+  height: 22px;
+  border: 2px solid rgba(180, 200, 220, 0.5);
+  background: rgba(4, 8, 13, 0.9);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -228,21 +243,22 @@ html, body {
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--mono);
-  font-size: 12px;
-  color: rgba(240, 250, 255, 0.9);
-  mix-blend-mode: difference;
+  font-size: 14px;
+  font-weight: 700;
+  color: #08120c;
+  mix-blend-mode: normal;
 }
 
 #prompt {
   position: absolute;
   left: 50%;
-  bottom: 168px;
+  bottom: 176px;
   transform: translateX(-50%);
-  padding: 8px 16px;
-  background: rgba(8, 12, 18, 0.82);
-  border: 1px solid var(--panel-line);
+  padding: 9px 18px;
+  background: rgba(4, 8, 14, 0.9);
+  border: 1px solid rgba(170, 200, 230, 0.4);
   border-radius: 3px;
-  font-size: 15px;
+  font-size: 17px;
   letter-spacing: 0.6px;
   color: #dfe8f4;
 }
@@ -299,23 +315,28 @@ html, body {
 
 #speedo {
   position: absolute;
-  right: 34px;
-  bottom: 40px;
+  right: 26px;
+  bottom: 32px;
   text-align: right;
+  padding: 2px 14px 6px;
+  background: rgba(4, 8, 14, 0.72);
+  border-radius: 3px;
   font-family: var(--mono);
 }
 
 #speed-value {
-  font-size: 46px;
-  font-weight: 700;
-  color: #f4f8ff;
+  font-size: 60px;
+  font-weight: 800;
+  color: #ffffff;
   letter-spacing: -1px;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 3px 8px rgba(0, 0, 0, 1), 0 0 3px rgba(0, 0, 0, 1);
 }
 
 #speed-unit {
   margin-left: 6px;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 2px;
   color: var(--dim);
 }
@@ -328,6 +349,32 @@ html, body {
   z-index: 15;
   box-shadow: inset 0 0 190px 40px rgba(255, 40, 40, 0.9);
   transition: opacity 60ms linear;
+}
+
+#cover-title {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  font-size: 62px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 5px 18px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 1);
+}
+
+#cover-title .ct-solid {
+  color: #ffffff;
+}
+
+#cover-title .ct-neon {
+  color: rgba(255, 91, 143, 0.34);
+  -webkit-text-stroke: 2.5px rgba(255, 116, 162, 1);
+  text-shadow: 0 0 26px rgba(255, 91, 143, 0.7), 0 5px 18px rgba(0, 0, 0, 0.95);
 }
 
 #hud.cover {
@@ -351,8 +398,8 @@ html, body {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 22% 45%, rgba(5, 8, 13, 0.05) 0%, rgba(4, 7, 11, 0.62) 58%, rgba(3, 5, 8, 0.9) 100%),
-    linear-gradient(180deg, rgba(4, 7, 12, 0.45) 0%, rgba(4, 7, 12, 0) 40%, rgba(4, 7, 12, 0.62) 100%);
+    radial-gradient(ellipse at 24% 45%, rgba(5, 8, 13, 0.02) 0%, rgba(4, 7, 11, 0.34) 60%, rgba(3, 5, 8, 0.66) 100%),
+    linear-gradient(180deg, rgba(4, 7, 12, 0.24) 0%, rgba(4, 7, 12, 0) 42%, rgba(4, 7, 12, 0.4) 100%);
 }
 
 .start-inner, .pause-inner {
@@ -376,14 +423,16 @@ h1 {
   line-height: 0.86;
   font-weight: 800;
   letter-spacing: -3px;
-  color: #f6f9ff;
-  text-shadow: 0 0 40px rgba(120, 190, 255, 0.22), 0 6px 30px rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  text-shadow: 0 0 40px rgba(120, 190, 255, 0.25), 0 6px 30px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 1);
 }
 
 h1 span {
-  color: transparent;
-  -webkit-text-stroke: 2px rgba(255, 91, 143, 0.95);
-  text-shadow: 0 0 30px rgba(255, 91, 143, 0.55);
+  /* A neon tube with a little gas in it: the outline alone turns into a pink smear at thumbnail
+     size, so the letters keep a faint fill and a dark shadow behind them. */
+  color: rgba(255, 91, 143, 0.3);
+  -webkit-text-stroke: 3px rgba(255, 110, 158, 1);
+  text-shadow: 0 0 34px rgba(255, 91, 143, 0.6), 0 5px 16px rgba(0, 0, 0, 0.95);
 }
 
 h2 {

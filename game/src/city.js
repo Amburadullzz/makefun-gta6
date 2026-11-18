@@ -73,9 +73,9 @@ export class City {
         depthWrite: false,
         fog: false,
         uniforms: {
-          top: { value: new THREE.Color(0x050a18) },
-          horizon: { value: new THREE.Color(0x24405e) },
-          glow: { value: new THREE.Color(0x6a4a52) },
+          top: { value: new THREE.Color(0x0b1a36) },
+          horizon: { value: new THREE.Color(0x3a6a96) },
+          glow: { value: new THREE.Color(0x9a6a5e) },
         },
         vertexShader: /* glsl */ `
           varying vec3 vDirection;
@@ -121,13 +121,22 @@ export class City {
       ),
     );
 
-    const hemisphere = new THREE.HemisphereLight(0x8fb0e0, 0x1b2431, 2.1);
+    // Three lights and a fill. The night is still a night: the sky is the key, a cold moon throws
+    // the long shadows, and a warm bounce off the wet street lifts every facade out of the black so
+    // that a building, a road and a car stay three different values when the frame is shrunk.
+    const hemisphere = new THREE.HemisphereLight(0xa6c4ea, 0x2c3a4c, 2.9);
     this.scene.add(hemisphere);
-    const moon = new THREE.DirectionalLight(0xb4c8ec, 1.5);
+    const moon = new THREE.DirectionalLight(0xc2d6f4, 2.1);
     moon.position.set(-160, 220, 120);
     this.scene.add(moon);
-    this.scene.add(new THREE.AmbientLight(0x44546e, 1.7));
+    // A low warm key from the harbour end of the street: the sodium glow of a city that never
+    // switches off, catching the faces the moon leaves dark.
+    const sodium = new THREE.DirectionalLight(0xffb478, 1.35);
+    sodium.position.set(210, 46, -180);
+    this.scene.add(sodium);
+    this.scene.add(new THREE.AmbientLight(0x6b7f9e, 2.2));
     this.moonlight = moon;
+    this.sodiumLight = sodium;
   }
 
   // ---------------------------------------------------------------- roads
@@ -145,10 +154,10 @@ export class City {
       const centre = k * PITCH;
       // East-west avenue at z = centre.
       this.roads.push({ axis: 'x', centre, from: -12, to: far, width: ROAD_WIDTH });
-      asphalt.addGround(-12, centre - ROAD_WIDTH / 2, far, centre + ROAD_WIDTH / 2, 0, k % 2 === 0 ? 0x20252d : 0x1c2027);
+      asphalt.addGround(-12, centre - ROAD_WIDTH / 2, far, centre + ROAD_WIDTH / 2, 0, k % 2 === 0 ? 0x2d3541 : 0x283039);
       // North-south street at x = centre.
       this.roads.push({ axis: 'z', centre, from: -12, to: far, width: ROAD_WIDTH });
-      asphalt.addGround(centre - ROAD_WIDTH / 2, -12, centre + ROAD_WIDTH / 2, far, 0, k % 2 === 0 ? 0x20252d : 0x1c2027);
+      asphalt.addGround(centre - ROAD_WIDTH / 2, -12, centre + ROAD_WIDTH / 2, far, 0, k % 2 === 0 ? 0x2d3541 : 0x283039);
     }
 
     // Kerb stones and lane paint along every road.
@@ -159,25 +168,25 @@ export class City {
         const end = Math.min(along + 4, far);
         if (end <= start) continue;
         // Centre dashes on the east-west avenue.
-        markings.addGround(start, centre - 0.18, end, centre + 0.18, 0.03, 0xd8c48a);
+        markings.addGround(start, centre - 0.24, end, centre + 0.24, 0.03, 0xffe9b4);
         // Edge lines just inside the kerb.
-        markings.addGround(start, centre - ROAD_WIDTH / 2 + 0.6, end, centre - ROAD_WIDTH / 2 + 0.85, 0.03, 0x6d7a84);
-        markings.addGround(start, centre + ROAD_WIDTH / 2 - 0.85, end, centre + ROAD_WIDTH / 2 - 0.6, 0.03, 0x6d7a84);
+        markings.addGround(start, centre - ROAD_WIDTH / 2 + 0.6, end, centre - ROAD_WIDTH / 2 + 0.95, 0.03, 0xa9b8c6);
+        markings.addGround(start, centre + ROAD_WIDTH / 2 - 0.95, end, centre + ROAD_WIDTH / 2 - 0.6, 0.03, 0xa9b8c6);
         // The same for the north-south street.
-        markings.addGround(centre - 0.18, start, centre + 0.18, end, 0.03, 0xd8c48a);
-        markings.addGround(centre - ROAD_WIDTH / 2 + 0.6, start, centre - ROAD_WIDTH / 2 + 0.85, end, 0.03, 0x6d7a84);
-        markings.addGround(centre + ROAD_WIDTH / 2 - 0.85, start, centre + ROAD_WIDTH / 2 - 0.6, end, 0.03, 0x6d7a84);
+        markings.addGround(centre - 0.24, start, centre + 0.24, end, 0.03, 0xffe9b4);
+        markings.addGround(centre - ROAD_WIDTH / 2 + 0.6, start, centre - ROAD_WIDTH / 2 + 0.95, end, 0.03, 0xa9b8c6);
+        markings.addGround(centre + ROAD_WIDTH / 2 - 0.95, start, centre + ROAD_WIDTH / 2 - 0.6, end, 0.03, 0xa9b8c6);
       }
       // Kerb lips where the slab meets the asphalt.
       for (let j = 0; j < GRID; j += 1) {
         const z0 = j * PITCH + BLOCK_INSET;
         const z1 = (j + 1) * PITCH - BLOCK_INSET;
-        kerbs.addBox(centre + ROAD_WIDTH / 2 + 0.12, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, 0.24, SIDEWALK_HEIGHT, z1 - z0, 0x3a4048);
-        kerbs.addBox(centre - ROAD_WIDTH / 2 - 0.12, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, 0.24, SIDEWALK_HEIGHT, z1 - z0, 0x3a4048);
+        kerbs.addBox(centre + ROAD_WIDTH / 2 + 0.12, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, 0.24, SIDEWALK_HEIGHT, z1 - z0, 0x6d7783);
+        kerbs.addBox(centre - ROAD_WIDTH / 2 - 0.12, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, 0.24, SIDEWALK_HEIGHT, z1 - z0, 0x6d7783);
         const x0 = j * PITCH + BLOCK_INSET;
         const x1 = (j + 1) * PITCH - BLOCK_INSET;
-        kerbs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, centre + ROAD_WIDTH / 2 + 0.12, x1 - x0, SIDEWALK_HEIGHT, 0.24, 0x3a4048);
-        kerbs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, centre - ROAD_WIDTH / 2 - 0.12, x1 - x0, SIDEWALK_HEIGHT, 0.24, 0x3a4048);
+        kerbs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, centre + ROAD_WIDTH / 2 + 0.12, x1 - x0, SIDEWALK_HEIGHT, 0.24, 0x6d7783);
+        kerbs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, centre - ROAD_WIDTH / 2 - 0.12, x1 - x0, SIDEWALK_HEIGHT, 0.24, 0x6d7783);
       }
     }
 
@@ -187,20 +196,28 @@ export class City {
         const cx = ix * PITCH;
         const cz = iz * PITCH;
         for (let stripe = -6; stripe <= 6; stripe += 1.6) {
-          markings.addGround(cx - ROAD_WIDTH / 2 + 1.2, cz + stripe, cx - ROAD_WIDTH / 2 + 2.4, cz + stripe + 0.8, 0.035, 0xcfd6d8);
-          markings.addGround(cx + ROAD_WIDTH / 2 - 2.4, cz + stripe, cx + ROAD_WIDTH / 2 - 1.2, cz + stripe + 0.8, 0.035, 0xcfd6d8);
-          markings.addGround(cx + stripe, cz - ROAD_WIDTH / 2 + 1.2, cx + stripe + 0.8, cz - ROAD_WIDTH / 2 + 2.4, 0.035, 0xcfd6d8);
-          markings.addGround(cx + stripe, cz + ROAD_WIDTH / 2 - 2.4, cx + stripe + 0.8, cz + ROAD_WIDTH / 2 - 1.2, 0.035, 0xcfd6d8);
+          markings.addGround(cx - ROAD_WIDTH / 2 + 1.2, cz + stripe, cx - ROAD_WIDTH / 2 + 2.4, cz + stripe + 0.8, 0.035, 0xf0f6f8);
+          markings.addGround(cx + ROAD_WIDTH / 2 - 2.4, cz + stripe, cx + ROAD_WIDTH / 2 - 1.2, cz + stripe + 0.8, 0.035, 0xf0f6f8);
+          markings.addGround(cx + stripe, cz - ROAD_WIDTH / 2 + 1.2, cx + stripe + 0.8, cz - ROAD_WIDTH / 2 + 2.4, 0.035, 0xf0f6f8);
+          markings.addGround(cx + stripe, cz + ROAD_WIDTH / 2 - 2.4, cx + stripe + 0.8, cz + ROAD_WIDTH / 2 - 1.2, 0.035, 0xf0f6f8);
         }
       }
     }
 
+    // The wet asphalt carries a little of the sky, so the road is a surface with a value of its
+    // own instead of a hole between the buildings.
     this.group.add(
-      new THREE.Mesh(asphalt.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x05080c })),
+      new THREE.Mesh(
+        asphalt.build(),
+        new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x1a2634, emissiveIntensity: 1 }),
+      ),
     );
     this.group.add(new THREE.Mesh(markings.build(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: true })));
     this.group.add(
-      new THREE.Mesh(kerbs.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x080b0f })),
+      new THREE.Mesh(
+        kerbs.build(),
+        new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x121a24 }),
+      ),
     );
   }
 
@@ -223,7 +240,7 @@ export class City {
         const z1 = (j + 1) * PITCH - BLOCK_INSET;
         this.blocks.push({ x0, x1, z0, z1, i, j });
         this.sidewalks.push({ x0, x1, z0, z1 });
-        slabs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, x1 - x0, SIDEWALK_HEIGHT, z1 - z0, 0x4a5058);
+        slabs.addBox((x0 + x1) / 2, SIDEWALK_HEIGHT / 2, (z0 + z1) / 2, x1 - x0, SIDEWALK_HEIGHT, z1 - z0, 0x717b87);
 
         const district = this.districtOf(i, j);
         const special = this.specialBuildingAt(i, j);
@@ -245,14 +262,14 @@ export class City {
     }
 
     this.group.add(
-      new THREE.Mesh(slabs.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x0a0e14 })),
+      new THREE.Mesh(slabs.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x151d27 })),
     );
     this.group.add(new THREE.Mesh(lotPaint.build(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: true })));
     this.group.add(
-      new THREE.Mesh(bodies.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x0a1018 })),
+      new THREE.Mesh(bodies.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x161f2c })),
     );
     this.group.add(
-      new THREE.Mesh(details.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x080b10 })),
+      new THREE.Mesh(details.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x121922 })),
     );
     this.group.add(
       new THREE.Mesh(
@@ -414,11 +431,11 @@ export class City {
   /** A grid of small lit quads on all four faces; unlit cells are simply left out. */
   buildWindows(windows, spec, base) {
     const { x0, x1, z0, z1, height } = spec;
-    const litChance = spec.district === 'warehouse' ? 0.26 : spec.district === 'tower' ? 0.56 : 0.42;
+    const litChance = spec.district === 'warehouse' ? 0.38 : spec.district === 'tower' ? 0.7 : 0.56;
     const stepX = 3.4;
     const stepY = 3.6;
-    const windowW = 1.5;
-    const windowH = 1.9;
+    const windowW = 2.0;
+    const windowH = 2.4;
 
     const faces = [
       { axis: 'z', at: z0 - 0.06, from: x0 + 1.4, to: x1 - 1.4, facing: -1 },
@@ -471,10 +488,10 @@ export class City {
     const shopColours = [0xffd9a0, 0xffc27a, 0xfff0c8, 0x9fe8ff, 0xffb0c8];
     for (const face of faces) {
       for (let along = face.from; along < face.to - 2.4; along += 3.6) {
-        if (!this.rng.chance(0.45)) continue;
-        const colour = shade(this.rng.pick(shopColours), this.rng.range(0.6, 0.95));
-        const height = 1.9;
-        const width = 2.6;
+        if (!this.rng.chance(0.62)) continue;
+        const colour = shade(this.rng.pick(shopColours), this.rng.range(0.72, 1));
+        const height = 2.3;
+        const width = 3.0;
         if (face.axis === 'z') {
           windows.addFace(
             [along + width / 2, base + 1.35, face.at],
@@ -571,11 +588,11 @@ export class City {
         glowGeometry,
         new THREE.PointsMaterial({
           color: 0xffc98a,
-          size: 7,
+          size: 9,
           sizeAttenuation: false,
-          map: makeGlowTexture('rgba(255,214,160,0.95)', 'rgba(255,170,90,0)'),
+          map: makeGlowTexture('rgba(255,224,175,0.95)', 'rgba(255,180,100,0)'),
           transparent: true,
-          opacity: 0.5,
+          opacity: 0.72,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
         }),
@@ -590,7 +607,7 @@ export class City {
       new THREE.MeshBasicMaterial({
         map: makeGlowTexture('rgba(255,196,130,0.75)', 'rgba(255,150,70,0)'),
         transparent: true,
-        opacity: 0.26,
+        opacity: 0.42,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         toneMapped: false,
@@ -609,7 +626,7 @@ export class City {
     // A handful of real lights near the action, moved with the player each frame.
     this.poolLights = [];
     for (let i = 0; i < 2; i += 1) {
-      const light = new THREE.PointLight(0xffb86b, 22, 34, 2);
+      const light = new THREE.PointLight(0xffb86b, 34, 42, 2);
       light.position.set(0, 7, 0);
       this.scene.add(light);
       this.poolLights.push(light);
@@ -1249,7 +1266,7 @@ export class City {
       nearest.forEach((entry, index) => {
         const light = this.poolLights[index];
         light.position.set(entry.lamp.x, 6.6, entry.lamp.z);
-        light.intensity = entry.d < 900 ? 26 : 0;
+        light.intensity = entry.d < 900 ? 38 : 0;
       });
     }
   }

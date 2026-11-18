@@ -30,11 +30,13 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.55;
+renderer.toneMappingExposure = 1.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x16283c, 0.0019);
+// A night that keeps its colour: the fog is the sky's own blue, so a distant tower fades into
+// weather rather than into black, and a frame shrunk to a thumbnail keeps three planes of depth.
+scene.fog = new THREE.FogExp2(0x2b4360, 0.0016);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2400);
 
@@ -152,7 +154,7 @@ function startNewGame() {
   player.teleport(city.spots.bar.x + 4, city.spots.bar.z + 6, Math.PI);
   cameraRig.setOrbit(Math.PI, 0.28, 5.6);
   game.mode = 'playing';
-  renderer.toneMappingExposure = 1.55;
+  renderer.toneMappingExposure = 1.9;
   ui.hideStart();
   ui.hideEnding();
   hud.show(true);
@@ -175,7 +177,7 @@ function continueGame() {
   missions.stage = state.missionStage;
   player.teleport(save.x ?? city.spots.bar.x + 4, save.z ?? city.spots.bar.z + 6, save.yaw ?? Math.PI);
   game.mode = 'playing';
-  renderer.toneMappingExposure = 1.55;
+  renderer.toneMappingExposure = 1.9;
   ui.hideStart();
   hud.show(true);
   audio.init();
@@ -400,13 +402,15 @@ function updateWorld(rawDelta) {
     traffic.syncInstances();
   } else if (game.mode === 'title') {
     // A slow drift over the bay behind the title card; the cover is a little brighter than play.
-    renderer.toneMappingExposure = 1.85;
+    renderer.toneMappingExposure = 2.55;
     game.elapsed += rawDelta;
     const angle = Math.sin(game.elapsed * 0.06) * 0.22 + 0.1;
-    const distance = 340;
-    camera.position.set(200 + Math.sin(angle) * distance, 46, 200 + Math.cos(angle) * distance);
-    camera.lookAt(196, 46, 150);
-    camera.fov = 58;
+    // Close enough that the skyline fills the right of the frame and its windows are big enough to
+    // survive a shrink; low enough that the lit streets are in the shot and not just rooftops.
+    const distance = 235;
+    camera.position.set(200 + Math.sin(angle) * distance, 34, 200 + Math.cos(angle) * distance);
+    camera.lookAt(196, 30, 148);
+    camera.fov = 62;
     camera.updateProjectionMatrix();
     city.update(rawDelta, { x: 196, z: 196 });
     traffic.update(rawDelta, null);
